@@ -1,0 +1,591 @@
+import type {
+  Announcement,
+  AnnouncementAudience,
+  AnnouncementLevel,
+  AudioModule,
+  AudioTask,
+  AuditEvent,
+  BasicInfoConfig,
+  BillingCheckout,
+  BillingConfig,
+  EmailLoginResult,
+  EmailLoginPayload,
+  EmailRegisterPayload,
+  EmailAuthConfigState,
+  InstallStatus,
+  InstallPayload,
+  MimoConfig,
+  QuotaSummary,
+  Role,
+  SystemSetting,
+  User,
+} from "@/lib/types"
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "/api"
+const UNSAFE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"])
+const CSRF_EXEMPT_PATHS = new Set(["/install"])
+
+type RequestOptions = RequestInit
+let csrfToken: string | null = null
+
+export class ApiError extends Error {
+  status: number
+
+  constructor(message: string, status: number) {
+    super(message)
+    this.name = "ApiError"
+    this.status = status
+  }
+}
+
+export function apiPath(path: string) {
+  const rawEndpoint = path.startsWith("/") ? path : `/${path}`
+  const endpoint = rawEndpoint.replace(/^\/api(?=\/)/, "")
+  const base = API_BASE_URL.trim() || "/api"
+
+  if (base.includes("?")) {
+    const separator =
+      base.endsWith("=") || base.endsWith("?") || base.endsWith("&") ? "" : "="
+
+    return `${base}${separator}${endpoint}`
+  }
+
+  return `${base.replace(/\/$/, "")}${endpoint}`
+}
+
+async function fetchCsrfToken() {
+  if (typeof window === "undefined") {
+    return null
+  }
+
+  if (csrfToken) {
+    return csrfToken
+  }
+
+  let response: Response
+
+  try {
+    response = await fetch(apiPath("/csrf-token"), {
+      credentials: "include",
+      headers: {
+        Accept: "application/json",
+      },
+    })
+  } catch {
+    return null
+  }
+
+  if (!response.ok) {
+    return null
+  }
+
+  const data = (await response.json()) as { token?: string }
+  csrfToken = data.token ?? null
+
+  return csrfToken
+}
+
+function buildHeaders(headers: HeadersInit | undefined, body: BodyInit | null | undefined) {
+  const requestHeaders = new Headers(headers)
+
+  if (!requestHeaders.has("Accept")) {
+    requestHeaders.set("Accept", "application/json")
+  }
+
+  if (!(body instanceof FormData) && !requestHeaders.has("Content-Type")) {
+    requestHeaders.set("Content-Type", "application/json")
+  }
+
+  return requestHeaders
+}
+
+async function fetchWithSession(path: string, init: RequestInit) {
+  const method = (init.method ?? "GET").toUpperCase()
+  const headers = buildHeaders(init.headers, init.body ?? null)
+  const shouldAttachCsrf =
+    UNSAFE_METHODS.has(method) && !CSRF_EXEMPT_PATHS.has(path)
+
+  if (shouldAttachCsrf) {
+    const token = await fetchCsrfToken()
+
+    if (token) {
+      headers.set("X-CSRF-TOKEN", token)
+    }
+  }
+
+  let response = await fetch(apiPath(path), {
+    ...init,
+    credentials: "include",
+    headers,
+  })
+
+  if (response.status === 419 && shouldAttachCsrf) {
+    csrfToken = null
+    const retryHeaders = buildHeaders(init.headers, init.body ?? null)
+    const token = await fetchCsrfToken()
+
+    if (token) {
+      retryHeaders.set("X-CSRF-TOKEN", token)
+      response = await fetch(apiPath(path), {
+        ...init,
+        credentials: "include",
+        headers: retryHeaders,
+      })
+    }
+  }
+
+  return response
+}
+
+async function request<T>(
+  path: string,
+  { headers, ...init }: RequestOptions = {}
+) {
+  const response = await fetchWithSession(path, { ...init, headers })
+
+  if (!response.ok) {
+    let message = `请求失败：${response.status}`
+
+    try {
+      const data = (await response.json()) as {
+        error?: { message?: string }
+        message?: string
+      }
+      message = data.error?.message ?? data.message ?? message
+    } catch {
+      message = response.statusText || message
+    }
+
+    throw new ApiError(message, response.status)
+  }
+
+  if (response.status === 204) {
+    return undefined as T
+  }
+
+  return (await response.json()) as T
+}
+
+function mapUser(input: Partial<User> & { is_admin?: boolean }): User {
+  return {
+    id: String(input.id ?? ""),
+    name: input.name ?? "",
+    email: input.email,
+    role: input.role ?? (input.is_admin ? "admin" : "user"),
+    status: input.status ?? "active",
+    planId: input.planId ?? input.plan_id,
+    quotaBalance: input.quotaBalance ?? input.quota_balance ?? 0,
+    emailVerifiedAt: input.emailVerifiedAt ?? input.email_verified_at,
+    twoFactorEnabled: input.twoFactorEnabled ?? input.two_factor_enabled ?? false,
+    hasPassword: input.hasPassword ?? input.has_password ?? false,
+    avatarUrl: input.avatarUrl ?? input.avatar_url,
+    linuxdoId: input.linuxdoId ?? input.linuxdo_id,
+    lastLoginAt: input.lastLoginAt ?? input.last_login_at,
+    createdAt: input.createdAt ?? input.created_at,
+  }
+}
+
+function mapAnnouncement(input: Partial<Announcement>): Announcement {
+  return {
+    id: String(input.id ?? ""),
+    title: input.title ?? "",
+    content: input.content ?? "",
+    level: (input.level ?? "info") as AnnouncementLevel,
+    audience: (input.audience ?? "all") as AnnouncementAudience,
+    active: input.active !== false,
+    startsAt: input.startsAt ?? input.starts_at,
+    endsAt: input.endsAt ?? input.ends_at,
+    createdAt: input.createdAt ?? input.created_at,
+    updatedAt: input.updatedAt ?? input.updated_at,
+  }
+}
+
+function endpointForModule(module: AudioModule) {
+  return {
+    "speech-recognition": "/mimo/asr",
+    "speech-synthesis": "/mimo/tts",
+    "voice-design": "/mimo/voice-design",
+    "voice-clone": "/mimo/voice-clone",
+  }[module]
+}
+
+export const api = {
+  installStatus() {
+    return request<InstallStatus>("/install/status").then((status) => ({
+      ...status,
+      administratorBound:
+        status.administratorBound ?? status.admin_bound ?? false,
+      linuxDoConfigured:
+        status.linuxDoConfigured ?? status.linuxdo_configured ?? false,
+      emailAuthEnabled:
+        status.emailAuthEnabled ??
+        status.email_auth_enabled ??
+        status.email_configured ??
+        false,
+    }))
+  },
+  install(payload: InstallPayload) {
+    return request<{ installed: boolean; user: User }>("/install", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }).then((data) => ({
+      installed: data.installed,
+      user: mapUser(data.user),
+    }))
+  },
+  loginWithLinuxDo() {
+    return request<{ authorize_url: string }>("/auth/linuxdo/redirect").then(
+      ({ authorize_url }) => ({ redirectUrl: authorize_url })
+    )
+  },
+  loginWithEmail(payload: EmailLoginPayload) {
+    return request<{
+      user?: User
+      two_factor_required?: boolean
+      email?: string
+    }>("/auth/email/login", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }).then((data): EmailLoginResult => {
+      if (data.two_factor_required) {
+        return {
+          user: null,
+          twoFactorRequired: true,
+          email: data.email ?? payload.email,
+        }
+      }
+
+      return {
+        user: mapUser(data.user ?? {}),
+        twoFactorRequired: false,
+      }
+    })
+  },
+  verifyEmailTwoFactor(payload: { email: string; code: string }) {
+    return request<{ user: User }>("/auth/email/two-factor", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }).then(({ user }) => mapUser(user))
+  },
+  registerWithEmail(payload: EmailRegisterPayload) {
+    return request<{
+      user?: User
+      verification_required?: boolean
+      message?: string
+    }>("/auth/email/register", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }).then((data) => ({
+      user: data.user ? mapUser(data.user) : null,
+      verificationRequired: data.verification_required === true,
+      message: data.message,
+    }))
+  },
+  verifyEmail(payload: { email: string; token: string }) {
+    return request<{ user: User }>("/auth/email/verify", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }).then(({ user }) => mapUser(user))
+  },
+  me() {
+    return request<{ user: User }>("/me").then(({ user }) => mapUser(user))
+  },
+  logout() {
+    return request<void>("/auth/logout", { method: "POST" })
+  },
+  updateAccountProfile(payload: { name: string }) {
+    return request<{ user: User }>("/account/profile", {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }).then(({ user }) => mapUser(user))
+  },
+  updateAccountEmail(payload: { email: string; current_password?: string }) {
+    return request<{ user: User; verification_required?: boolean }>(
+      "/account/email",
+      {
+        method: "PUT",
+        body: JSON.stringify(payload),
+      }
+    ).then(({ user, verification_required }) => ({
+      user: mapUser(user),
+      verificationRequired: verification_required === true,
+    }))
+  },
+  updateAccountPassword(payload: {
+    current_password?: string
+    password: string
+    password_confirmation: string
+  }) {
+    return request<{ user: User }>("/account/password", {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }).then(({ user }) => mapUser(user))
+  },
+  sendTwoFactorChallenge(payload: { current_password?: string }) {
+    return request<{ sent: boolean; expires_at?: string }>(
+      "/account/two-factor/challenge",
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }
+    )
+  },
+  updateTwoFactor(payload: {
+    enabled: boolean
+    code?: string
+    current_password?: string
+  }) {
+    return request<{ user: User }>("/account/two-factor", {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }).then(({ user }) => mapUser(user))
+  },
+  deleteAccount(payload: { current_password?: string; confirmation: string }) {
+    return request<void>("/account", {
+      method: "DELETE",
+      body: JSON.stringify(payload),
+    })
+  },
+  adminMimoConfig() {
+    return request<{ config: MimoConfig }>("/admin/mimo-config").then(
+      ({ config }) => config
+    )
+  },
+  adminBasicInfo() {
+    return request<{ config: BasicInfoConfig }>("/admin/basic-info").then(
+      ({ config }) => config
+    )
+  },
+  saveAdminBasicInfo(config: BasicInfoConfig) {
+    return request<{ config: BasicInfoConfig }>("/admin/basic-info", {
+      method: "PUT",
+      body: JSON.stringify(config),
+    }).then(({ config }) => config)
+  },
+  saveAdminMimoConfig(config: MimoConfig & { api_key?: string }) {
+    return request<{ config: MimoConfig }>("/admin/mimo-config", {
+      method: "PUT",
+      body: JSON.stringify(config),
+    }).then(({ config }) => config)
+  },
+  adminEmailAuthConfig() {
+    return request<{ config: EmailAuthConfigState }>(
+      "/admin/email-auth-config"
+    ).then(({ config }) => config)
+  },
+  saveAdminEmailAuthConfig(config: {
+    enabled?: boolean
+    driver?: string
+    smtp_host?: string
+    smtp_port?: number
+    smtp_username?: string
+    smtp_password?: string
+    smtp_encryption?: string
+    mail_api_provider?: string
+    mail_api_endpoint?: string
+    mail_api_token?: string
+    mail_from_address?: string
+    mail_from_name?: string
+    verification_required?: boolean
+    verification_subject?: string
+    verification_body?: string
+    two_factor_subject?: string
+    two_factor_body?: string
+  }) {
+    return request<{ config: EmailAuthConfigState }>(
+      "/admin/email-auth-config",
+      {
+        method: "PUT",
+        body: JSON.stringify(config),
+      }
+    ).then(({ config }) => config)
+  },
+  testAdminEmailAuthConfig(config: {
+    to?: string
+    driver?: string
+    smtp_host?: string
+    smtp_port?: number
+    smtp_username?: string
+    smtp_password?: string
+    smtp_encryption?: string
+    mail_api_provider?: string
+    mail_api_endpoint?: string
+    mail_api_token?: string
+    mail_from_address?: string
+    mail_from_name?: string
+  }) {
+    return request<{ sent: boolean; message: string }>(
+      "/admin/email-auth-config/test",
+      {
+        method: "POST",
+        body: JSON.stringify(config),
+      }
+    )
+  },
+  billingConfig() {
+    return request<{ config: BillingConfig }>("/billing/config").then(
+      ({ config }) => config
+    )
+  },
+  createBillingCheckout(planId: string) {
+    return request<BillingCheckout>("/billing/checkout", {
+      method: "POST",
+      body: JSON.stringify({ plan_id: planId }),
+    })
+  },
+  quotaSummary() {
+    return request<{ quota: QuotaSummary }>("/quota/summary").then(
+      ({ quota }) => quota
+    )
+  },
+  checkIn() {
+    return request<{
+      checked: boolean
+      message: string
+      quota: QuotaSummary
+    }>("/quota/check-in", {
+      method: "POST",
+    })
+  },
+  adminBillingConfig() {
+    return request<{ config: BillingConfig }>("/admin/billing-config").then(
+      ({ config }) => config
+    )
+  },
+  saveAdminBillingConfig(config: Partial<BillingConfig>) {
+    return request<{ config: BillingConfig }>("/admin/billing-config", {
+      method: "PUT",
+      body: JSON.stringify(config),
+    }).then(({ config }) => config)
+  },
+  userMimoConfig() {
+    return request<{ config: MimoConfig }>("/user/api-config").then(
+      ({ config }) => config
+    )
+  },
+  saveUserMimoConfig(config: MimoConfig & { api_key?: string }) {
+    return request<{ config: MimoConfig }>("/user/api-config", {
+      method: "PUT",
+      body: JSON.stringify(config),
+    }).then(({ config }) => config)
+  },
+  tasks() {
+    return request<{ tasks?: AudioTask[]; job?: AudioTask[] }>("/mimo/jobs").then(
+      (data) => data.tasks ?? data.job ?? []
+    )
+  },
+  announcements() {
+    return request<{ announcements: Announcement[] }>("/announcements").then(
+      ({ announcements }) => announcements.map(mapAnnouncement)
+    )
+  },
+  adminAnnouncements() {
+    return request<{ announcements: Announcement[] }>("/admin/announcements").then(
+      ({ announcements }) => announcements.map(mapAnnouncement)
+    )
+  },
+  createAdminAnnouncement(payload: {
+    title: string
+    content: string
+    level: AnnouncementLevel
+    audience: AnnouncementAudience
+    active: boolean
+    starts_at?: string | null
+    ends_at?: string | null
+  }) {
+    return request<{ announcement: Announcement }>("/admin/announcements", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }).then(({ announcement }) => mapAnnouncement(announcement))
+  },
+  updateAdminAnnouncement(
+    id: string,
+    payload: {
+      title: string
+      content: string
+      level: AnnouncementLevel
+      audience: AnnouncementAudience
+      active: boolean
+      starts_at?: string | null
+      ends_at?: string | null
+    }
+  ) {
+    return request<{ announcement: Announcement }>(`/admin/announcements/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }).then(({ announcement }) => mapAnnouncement(announcement))
+  },
+  deleteAdminAnnouncement(id: string) {
+    return request<void>(`/admin/announcements/${id}`, {
+      method: "DELETE",
+    })
+  },
+  runAudioTask(module: AudioModule, form: FormData) {
+    return request<{ job: AudioTask }>(endpointForModule(module), {
+      method: "POST",
+      body: form,
+    }).then(({ job }) => job)
+  },
+  deleteTask(id: string) {
+    return request<void>(`/mimo/jobs/${id}`, {
+      method: "DELETE",
+    })
+  },
+  users() {
+    return request<{ users: User[] }>("/admin/users").then(({ users }) =>
+      users.map(mapUser)
+    )
+  },
+  updateUser(
+    id: string,
+    payload: {
+      name: string
+      email?: string | null
+      role: Role
+      status: "active" | "suspended"
+      plan_id?: string | null
+      quota_balance?: number
+    }
+  ) {
+    return request<{ user: User }>(`/admin/users/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }).then(({ user }) => mapUser(user))
+  },
+  bulkUsers(payload: {
+    ids: string[]
+    action: "activate" | "suspend" | "set_plan"
+    plan_id?: string | null
+  }) {
+    return request<{ users: User[] }>("/admin/users/bulk", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }).then(({ users }) => users.map(mapUser))
+  },
+  adminTasks() {
+    return request<{ tasks: AudioTask[] }>("/admin/jobs").then(
+      ({ tasks }) => tasks
+    )
+  },
+  deleteAdminTask(id: string) {
+    return request<void>(`/admin/jobs/${id}`, {
+      method: "DELETE",
+    })
+  },
+  bulkDeleteAdminTasks(ids: string[]) {
+    return request<{ deleted_ids: string[] }>("/admin/jobs/bulk-delete", {
+      method: "POST",
+      body: JSON.stringify({ ids }),
+    }).then(({ deleted_ids }) => deleted_ids)
+  },
+  auditEvents() {
+    return request<{ audits: AuditEvent[] }>("/admin/audits").then(
+      ({ audits }) => audits
+    )
+  },
+  systemSettings() {
+    return request<{ settings: SystemSetting[] }>("/admin/settings").then(
+      ({ settings }) => settings
+    )
+  },
+}

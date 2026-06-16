@@ -1,0 +1,17 @@
+services:
+  app:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/app.Dockerfile
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ${PUBLIC_API_BASE_URL:-/api}
+    env_file:
+      - .env
+    ports:
+      - "${WEB_PORT:-18081}:80"
+    volumes:
+      - app_storage:/var/www/backend/storage
+    restart: unless-stopped
+
+volumes:
+  app_storage:

@@ -1,0 +1,73 @@
+# Dependencies
+frontend/node_modules/
+backend/vendor/
+
+# Frontend build output
+frontend/.next/
+frontend/out/
+frontend/build/
+frontend/coverage/
+frontend/.vercel/
+frontend/.pnp
+frontend/.pnp.*
+frontend/.yarn/*
+!frontend/.yarn/patches
+!frontend/.yarn/plugins
+!frontend/.yarn/releases
+!frontend/.yarn/versions
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+frontend/.pnpm-debug.log*
+frontend/*.tsbuildinfo
+
+# Backend runtime output
+backend/.phpunit.result.cache
+backend/bootstrap/cache/*.php
+backend/storage/app/*
+backend/storage/framework/cache/*
+backend/storage/framework/sessions/*
+backend/storage/framework/testing/*
+backend/storage/framework/views/*
+backend/storage/logs/*
+!backend/storage/app/.gitkeep
+!backend/storage/app/audio/
+backend/storage/app/audio/*
+!backend/storage/app/audio/.gitkeep
+!backend/storage/app/audio/generated/
+backend/storage/app/audio/generated/*
+!backend/storage/app/audio/generated/.gitkeep
+!backend/storage/app/audio/uploads/
+backend/storage/app/audio/uploads/*
+!backend/storage/app/audio/uploads/.gitkeep
+!backend/storage/framework/cache/.gitkeep
+!backend/storage/framework/sessions/.gitkeep
+!backend/storage/framework/testing/.gitkeep
+!backend/storage/framework/views/.gitkeep
+!backend/storage/logs/.gitkeep
+
+# Package and deployment artifacts
+dist/
+*.zip
+*.tar
+*.tar.gz
+
+# Local environment and secrets
+.env
+.env.*
+backend/.env
+backend/.env.*
+!backend/.env.example
+frontend/.env
+frontend/.env.*
+*.pem
+*.key
+id_rsa*
+*_ed25519*
+
+# Local metadata
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+.git-backups/
