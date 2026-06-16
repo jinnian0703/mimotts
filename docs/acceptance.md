@@ -26,10 +26,9 @@ node .\scripts\verify-http-smoke.mjs
 
 ## 1. Installation And Deployment
 
-- [ ] A fresh clone starts from `deploy/docker` with the documented `docker compose --env-file .env -f docker-compose.yml up -d --build` command.
-- [ ] Docker includes one app container that serves the frontend, Laravel API, and SQLite-backed runtime storage.
-- [ ] Apache routes browser traffic to the frontend and `/api` traffic to Laravel without requiring a separate database container.
-- [ ] `.env.example` documents app URL, session, SQLite, LinuxDo Connect, and Mimo API defaults.
+- [ ] The documented daily update path is `scripts/build-source-upload.ps1` plus the BaoTa upload flow.
+- [ ] Docker is kept as a reference deployment and is not the default re-deploy path for normal source changes.
+- [ ] `.env.example` documents app URL, session, SQLite, LinuxDo Connect, and Mimo API defaults for the retained Docker path.
 - [ ] Laravel migrations run during setup or through a documented install step.
 - [ ] Rebuilding containers does not delete generated or uploaded audio files.
 

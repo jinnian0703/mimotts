@@ -12,48 +12,36 @@ Mimo 是一个开源、自托管的小米 MimoTTS 音频任务管理平台。它
 
 ## 快速开始
 
-推荐优先使用 Docker 标准部署：一个应用容器同时提供前端页面、Laravel API 和 SQLite 数据库文件，服务器只需要 Docker Compose。
-
-```bash
-cd deploy/docker
-cp .env.example .env
-docker run --rm php:7.4-cli-alpine php -r 'echo "base64:".base64_encode(random_bytes(32)).PHP_EOL;'
-```
-
-编辑刚生成的 `.env`，至少填写：
-
-```env
-WEB_PORT=18081
-APP_KEY=替换为上一步生成的完整输出
-APP_URL=http://服务器地址:18081
-FRONTEND_URL=http://服务器地址:18081
-PUBLIC_API_BASE_URL=/api
-SANCTUM_STATEFUL_DOMAINS=服务器地址:18081
-CORS_ALLOWED_ORIGINS=http://服务器地址:18081
-LINUXDO_REDIRECT_URI=http://服务器地址:18081/api/auth/linuxdo/callback
-```
-
-启动：
-
-```bash
-docker compose --env-file .env -f docker-compose.yml up -d --build
-```
-
-访问：
-
-```text
-http://服务器地址:18081/install
-```
-
-仓库不提供真实 `.env`，只保留示例文件 `.env.example`。真实 `.env`、密钥、上传音频、数据库文件和构建产物不要提交到 Git。
-
-如果使用宝塔面板，构建源码上传包：
+当前推荐的日常更新方式是宝塔源码上传：只有源码有改动时才重新构建上传包并同步到宝塔站点，不再重建 Docker 容器。
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/build-source-upload.ps1
 ```
 
-上传 `dist/source-upload` 内的全部文件到宝塔站点根目录，然后访问站点 `/install` 完成安装。详细说明见 [`deploy/source/README.md`](deploy/source/README.md)。
+生成结果：
+
+```text
+dist/source-upload
+dist/mimo-source-upload.zip
+```
+
+把 `dist/source-upload` 里的全部文件上传到宝塔站点根目录，或使用上传脚本：
+
+```powershell
+$env:MIMO_DEPLOY_HOST = "服务器地址"
+$env:MIMO_DEPLOY_TARGET = "/www/wwwroot/mimo.example.com"
+$env:MIMO_DEPLOY_SITE_NAME = "mimo.example.com"
+$env:MIMO_DEPLOY_KEY = "C:\Users\用户名\.ssh\deploy_key"
+powershell -ExecutionPolicy Bypass -File scripts/upload-source-upload.ps1
+```
+
+首次安装访问：
+
+```text
+https://mimo.example.com/install
+```
+
+Docker 配置仍保留在 `deploy/docker/`，只作为独立自托管或测试入口；当前线上更新不再通过 Docker 重部署。
 
 ## 核心能力
 
@@ -63,7 +51,7 @@ powershell -ExecutionPolicy Bypass -File scripts/build-source-upload.ps1
 | 账户体系 | 邮箱注册登录、邮箱验证、密码管理、两步验证、账号注销、LinuxDo Connect |
 | 额度计费 | 套餐配置、默认套餐、积分倍率、接口扣费、余额流水、每日签到 |
 | 管理后台 | 用户管理、公告管理、系统配置、Mimo API 配置、邮箱投递配置 |
-| 部署交付 | Docker 标准部署、宝塔源码上传 |
+| 部署交付 | 宝塔源码上传、Docker 标准部署 |
 
 ## 技术架构
 
@@ -73,7 +61,7 @@ powershell -ExecutionPolicy Bypass -File scripts/build-source-upload.ps1
 | Backend | Laravel 8、PHP 7.4、Laravel Sanctum |
 | Database | MySQL 5.7/8.0 或 SQLite |
 | Queue/Storage | Laravel 本地队列与本地音频存储 |
-| Deployment | Docker Compose、宝塔源码上传 |
+| Deployment | 宝塔源码上传、Docker Compose |
 | Payment | LinuxDo Credit 易支付兼容网关 |
 
 ## 目录结构
@@ -94,8 +82,8 @@ mimo/
 
 | 方式 | 适合场景 | 入口 |
 | --- | --- | --- |
-| Docker 标准部署 | 快速自托管、测试环境、希望最少组件 | [`deploy/docker/README.md`](deploy/docker/README.md) |
-| 宝塔源码上传 | 已有宝塔、Nginx、PHP 7.4、MySQL 的站点 | [`deploy/source/README.md`](deploy/source/README.md) |
+| 宝塔源码上传 | 当前线上更新方式；源码改动后构建上传包 | [`deploy/source/README.md`](deploy/source/README.md) |
+| Docker 标准部署 | 独立自托管或测试环境；不作为当前线上更新入口 | [`deploy/docker/README.md`](deploy/docker/README.md) |
 
 ## 运行要求
 
@@ -104,7 +92,7 @@ mimo/
 | PHP | 7.4 |
 | Composer | 2.x |
 | Node.js | 当前 LTS 版本 |
-| Database | Docker 标准部署默认 SQLite；宝塔源码部署使用 MySQL 5.7/8.0 |
+| Database | 宝塔源码部署使用 MySQL 5.7/8.0；Docker 标准部署默认 SQLite |
 | Docker | Docker Compose v2 |
 
 宝塔源码部署需要启用以下 PHP 扩展：
@@ -132,7 +120,7 @@ max_execution_time = 180
 
 ## 配置项
 
-核心配置可通过安装向导或环境变量写入。Docker 标准部署默认使用 SQLite，无需在安装页填写数据库信息；宝塔源码部署在安装页填写 MySQL 连接信息。
+核心配置可通过安装向导或环境变量写入。当前宝塔源码部署在安装页填写 MySQL 连接信息；Docker 标准部署默认使用 SQLite，无需在安装页填写数据库信息。
 
 - 数据库连接：SQLite 文件路径，或 MySQL 主机、端口、库名、用户、密码。
 - 管理员账户：名称、邮箱、密码。
@@ -237,7 +225,7 @@ $env:MIMO_DEPLOY_KEY = "C:\Users\用户名\.ssh\deploy_key"
 powershell -ExecutionPolicy Bypass -File scripts/upload-source-upload.ps1
 ```
 
-上传脚本会执行本地构建、压缩上传、远端备份、文件同步、运行目录保留和关键 PHP 文件语法检查。
+上传脚本会执行本地构建、压缩上传、远端备份、文件同步、运行目录保留和关键 PHP 文件语法检查。只有源码有改动时才需要运行上传流程；不要为了普通运行状态重建 Docker。
 
 ## 贡献
 

@@ -124,3 +124,5 @@ powershell -ExecutionPolicy Bypass -File scripts/build-source-upload.ps1
 ```
 
 该命令只用于生成上传包，不在服务器执行。
+
+只有源码有改动时才需要重新构建并上传。当前线上更新不通过 Docker 重部署。

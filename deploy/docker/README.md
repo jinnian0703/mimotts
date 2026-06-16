@@ -1,6 +1,8 @@
 # Docker 标准部署
 
-本目录是推荐的 Docker 部署入口，默认只有一个应用容器：
+本目录保留 Docker 标准部署入口，适合独立自托管或测试环境。当前线上日常更新使用 `deploy/source` 宝塔源码上传，不再通过 Docker 重部署。
+
+默认只有一个应用容器：
 
 ```text
 mimo-app
@@ -134,10 +136,16 @@ docker compose --env-file .env -f docker-compose.yml up -d
 
 ## 更新
 
-替换源码后执行：
+Docker 方案独立使用时，替换源码后执行：
 
 ```bash
 docker compose --env-file .env -f docker-compose.yml up -d --build
 ```
 
 应用容器启动时会根据 `RUN_MIGRATIONS=true` 自动执行数据库迁移。
+
+当前宝塔站点更新请使用仓库根目录的源码上传流程：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/build-source-upload.ps1
+```
