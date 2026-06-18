@@ -66,11 +66,12 @@ https://your-domain.example/install
 ### Docker 部署
 
 ```bash
-git clone https://github.com/jinnian0703/mimotts.git
+git clone --filter=blob:none --sparse https://github.com/jinnian0703/mimotts.git
 cd mimotts
+git sparse-checkout set deploy/docker
 cd deploy/docker
 cp .env.example .env
-docker compose --env-file .env -f docker-compose.yml up -d --build
+docker compose --env-file .env -f docker-compose.yml up -d
 ```
 
 访问：

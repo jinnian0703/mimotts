@@ -1,14 +1,6 @@
 services:
   app:
     image: ${MIMO_IMAGE:-ghcr.io/jinnian0703/mimotts:latest}
-    build:
-      context: ../..
-      dockerfile: deploy/docker/app.Dockerfile
-      args:
-        NEXT_PUBLIC_API_BASE_URL: ${PUBLIC_API_BASE_URL:-/api}
-        APP_VERSION: ${APP_VERSION:-dev}
-        APP_BUILD_COMMIT: ${APP_BUILD_COMMIT:-}
-        APP_BUILD_TIME: ${APP_BUILD_TIME:-}
     env_file:
       - .env
     ports:

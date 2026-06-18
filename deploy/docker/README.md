@@ -1,6 +1,6 @@
 # Docker 标准部署
 
-本目录保留 Docker 标准部署入口，适合独立自托管或测试环境。当前线上日常更新使用 `deploy/source` 宝塔源码上传，不再通过 Docker 重部署。
+本目录是 Docker 标准部署入口，适合独立自托管或测试环境。
 
 默认只有一个应用容器：
 
@@ -33,8 +33,10 @@ mimo_app_storage
 获取源码：
 
 ```bash
-git clone https://github.com/jinnian0703/mimotts.git
-cd mimotts/deploy/docker
+git clone --filter=blob:none --sparse https://github.com/jinnian0703/mimotts.git
+cd mimotts
+git sparse-checkout set deploy/docker
+cd deploy/docker
 ```
 
 仓库只提供示例文件：
@@ -76,7 +78,7 @@ DB_DATABASE=/var/www/backend/storage/database.sqlite
 在 `deploy/docker/` 目录执行：
 
 ```bash
-docker compose --env-file .env -f docker-compose.yml up -d --build
+docker compose --env-file .env -f docker-compose.yml up -d
 ```
 
 访问：
@@ -166,7 +168,7 @@ MIMO_UPDATE_ALLOW_UPGRADE=true
 MIMO_DOCKER_COMPOSE_DIR=/path/to/deploy/docker
 ```
 
-当前宝塔站点更新请使用仓库根目录的源码上传流程：
+如果需要从源码构建上传包，请使用仓库根目录的源码上传流程：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/build-source-upload.ps1
