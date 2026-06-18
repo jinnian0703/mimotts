@@ -134,9 +134,32 @@ if (-not (Test-Path $composerPath)) {
     Invoke-WebRequest -Uri "https://getcomposer.org/download/$composerVersion/composer.phar" -OutFile $composerPath
 }
 
-& php $composerPath install --working-dir $backendPath --no-dev --prefer-dist --no-interaction --no-progress --optimize-autoloader
-if ($LASTEXITCODE -ne 0) {
-    throw "Composer install failed."
+$previousComposerHome = $env:COMPOSER_HOME
+$previousGithubToken = $env:GITHUB_TOKEN
+$composerHomePath = Join-Path $distPath "composer-home"
+Remove-IfExists -Path $composerHomePath
+New-Item -ItemType Directory -Force -Path $composerHomePath | Out-Null
+
+try {
+    $env:COMPOSER_HOME = $composerHomePath
+    Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
+
+    & php $composerPath install --working-dir $backendPath --no-dev --prefer-dist --no-interaction --no-progress --optimize-autoloader
+    if ($LASTEXITCODE -ne 0) {
+        throw "Composer install failed."
+    }
+} finally {
+    if ($null -eq $previousComposerHome) {
+        Remove-Item Env:COMPOSER_HOME -ErrorAction SilentlyContinue
+    } else {
+        $env:COMPOSER_HOME = $previousComposerHome
+    }
+
+    if ($null -eq $previousGithubToken) {
+        Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
+    } else {
+        $env:GITHUB_TOKEN = $previousGithubToken
+    }
 }
 
 Push-Location $frontendPath
