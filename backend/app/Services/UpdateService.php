@@ -108,6 +108,11 @@ class UpdateService
             return $this->latestFromManifest($manifestUrl);
         }
 
+        $manifest = $this->latestFromManifest($this->defaultManifestUrl());
+        if (! empty($manifest['ok'])) {
+            return $manifest;
+        }
+
         return $this->latestFromGithubRelease();
     }
 
@@ -333,6 +338,11 @@ class UpdateService
     private function repository(): string
     {
         return trim((string) env('MIMO_UPDATE_REPOSITORY', self::DEFAULT_REPOSITORY), '/');
+    }
+
+    private function defaultManifestUrl(): string
+    {
+        return 'https://github.com/'.$this->repository().'/releases/latest/download/latest.json';
     }
 
     private function dockerImage(string $version): string
