@@ -30,6 +30,13 @@ mimo_app_storage
 
 ## 配置
 
+获取源码：
+
+```bash
+git clone https://github.com/jinnian0703/mimotts.git
+cd mimotts/deploy/docker
+```
+
 仓库只提供示例文件：
 
 ```bash
