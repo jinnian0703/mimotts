@@ -8,6 +8,8 @@ use App\Models\AudioFile;
 use App\Models\QuotaLedgerEntry;
 use App\Services\AudioStorageService;
 use App\Services\AuditLogger;
+use App\Services\AudioJobPayloadSummary;
+use App\Services\AudioRetentionService;
 use App\Services\BillingConfigService;
 use App\Services\MimoClient;
 use App\Services\MimoConfigService;
@@ -147,8 +149,10 @@ class MimoController
         ]);
     }
 
-    public function jobs(Request $request): JsonResponse
+    public function jobs(Request $request, AudioRetentionService $retention): JsonResponse
     {
+        $retention->pruneOpportunistically();
+
         return response()->json([
             'tasks' => AudioJob::query()
                 ->with('files')
@@ -347,7 +351,7 @@ class MimoController
                 ], 402);
             }
 
-            throw $e instanceof RuntimeException ? $e : new RuntimeException('音频处理失败');
+            throw $e instanceof RuntimeException ? $e : new RuntimeException('音频处理失败', 0, $e);
         }
     }
 
@@ -403,6 +407,8 @@ class MimoController
             'completedAt' => $this->formatTaskTime($job->completed_at),
             'outputUrl' => $file ? '/mimo/files/'.$file->id : null,
             'summary' => $job->error_message ?: ($job->status === 'completed' ? '处理完成' : '等待处理'),
+            'errorMessage' => $job->error_message,
+            'requestSummary' => app(AudioJobPayloadSummary::class)->forJob($job),
             'fileName' => $file ? ($file->original_name ?: basename($file->path)) : null,
             'fileMimeType' => $file ? $file->mime_type : null,
             'fileSize' => $file ? $file->size : null,

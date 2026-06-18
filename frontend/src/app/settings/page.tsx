@@ -8,6 +8,7 @@ import {
   IconMail,
   IconShieldCheck,
   IconTrash,
+  IconUnlink,
 } from "@tabler/icons-react"
 import { toast } from "sonner"
 
@@ -56,6 +57,7 @@ type SettingsDialog =
   | "email"
   | "password"
   | "two-factor"
+  | "linuxdo-unlink"
   | "delete"
   | "mimo"
   | null
@@ -65,6 +67,7 @@ export default function SettingsPage() {
   const user = useCurrentUser()
   const [accountUser, setAccountUser] = useState<User | null>(null)
   const [config, setConfig] = useState<MimoConfig>(defaultConfig)
+  const [linuxDoAvailable, setLinuxDoAvailable] = useState(false)
   const [dialog, setDialog] = useState<SettingsDialog>(null)
   const [saving, setSaving] = useState<string | null>(null)
   const [profileName, setProfileName] = useState("")
@@ -76,6 +79,7 @@ export default function SettingsPage() {
   const [twoFactorPassword, setTwoFactorPassword] = useState("")
   const [twoFactorCode, setTwoFactorCode] = useState("")
   const [twoFactorSent, setTwoFactorSent] = useState(false)
+  const [linuxDoPassword, setLinuxDoPassword] = useState("")
   const [deletePassword, setDeletePassword] = useState("")
   const [deleteConfirmation, setDeleteConfirmation] = useState("")
 
@@ -84,7 +88,47 @@ export default function SettingsPage() {
       .userMimoConfig()
       .then((value) => setConfig({ ...defaultConfig, ...value, api_key: "" }))
       .catch(() => undefined)
-  }, [])
+
+    api
+      .installStatus()
+      .then((status) => setLinuxDoAvailable(status.linuxDoLoginEnabled === true))
+      .catch(() => setLinuxDoAvailable(false))
+
+    const params = new URLSearchParams(window.location.search)
+    const linuxDoBind = params.get("linuxdo_bind")
+    if (linuxDoBind) {
+      params.delete("linuxdo_bind")
+      const nextQuery = params.toString()
+      window.history.replaceState(
+        null,
+        "",
+        `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ""}`
+      )
+
+      const toastKey = `mimotts:linuxdo_bind:${linuxDoBind}`
+      const shouldNotify = sessionStorage.getItem(toastKey) !== "shown"
+      sessionStorage.setItem(toastKey, "shown")
+
+      if (linuxDoBind === "success") {
+        if (shouldNotify) {
+          toast.success("LinuxDo 已绑定")
+        }
+        api
+          .me()
+          .then((nextUser) => {
+            setAccountUser(nextUser)
+            setSession(nextUser)
+          })
+          .catch(() => undefined)
+      } else if (linuxDoBind === "conflict") {
+        if (shouldNotify) {
+          toast.error("该 LinuxDo 账号已绑定其他用户")
+        }
+      } else if (shouldNotify) {
+        toast.error("LinuxDo 绑定会话已失效")
+      }
+    }
+  }, [router])
 
   function syncUser(nextUser: User) {
     setAccountUser(nextUser)
@@ -118,6 +162,11 @@ export default function SettingsPage() {
     setTwoFactorCode("")
     setTwoFactorSent(false)
     setDialog("two-factor")
+  }
+
+  function openLinuxDoUnlinkDialog() {
+    setLinuxDoPassword("")
+    setDialog("linuxdo-unlink")
   }
 
   function openDeleteDialog() {
@@ -258,6 +307,37 @@ export default function SettingsPage() {
     }
   }
 
+  async function bindLinuxDo() {
+    setSaving("linuxdo-bind")
+
+    try {
+      const { redirectUrl } = await api.bindLinuxDo()
+      window.location.href = redirectUrl
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "LinuxDo 绑定失败")
+      setSaving(null)
+    }
+  }
+
+  async function unlinkLinuxDo() {
+    setSaving("linuxdo-unlink")
+
+    try {
+      syncUser(
+        await api.unlinkLinuxDo({
+          current_password: linuxDoPassword || undefined,
+        })
+      )
+      setLinuxDoPassword("")
+      toast.success("LinuxDo 已解绑")
+      closeDialog()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "LinuxDo 解绑失败")
+    } finally {
+      setSaving(null)
+    }
+  }
+
   async function deleteAccount() {
     setSaving("delete")
 
@@ -282,10 +362,16 @@ export default function SettingsPage() {
   const hasPassword = currentUser?.hasPassword === true
   const deleteExpected = currentUser?.email || currentUser?.name || ""
   const twoFactorEnabled = currentUser?.twoFactorEnabled === true
+  const linuxDoBound = Boolean(currentUser?.linuxdoId)
   const profileSummary = currentUser?.name ?? "-"
   const emailSummary = currentUser?.email ?? "未绑定"
   const passwordSummary = hasPassword ? "已设置" : "未设置"
   const twoFactorSummary = twoFactorEnabled ? "已启用" : "未启用"
+  const linuxDoSummary = linuxDoBound
+    ? "已绑定"
+    : linuxDoAvailable
+      ? "未绑定"
+      : "未启用"
 
   return (
     <>
@@ -323,6 +409,17 @@ export default function SettingsPage() {
                 badge={twoFactorSummary}
                 actionLabel={twoFactorEnabled ? "管理" : "启用"}
                 onAction={openTwoFactorDialog}
+              />
+              <SettingsRow
+                label="LinuxDo"
+                value={linuxDoSummary}
+                badge={linuxDoBound ? "已绑定" : undefined}
+                actionLabel={linuxDoBound ? "解绑" : "绑定"}
+                actionVariant={linuxDoBound ? "destructive" : "outline"}
+                actionDisabled={
+                  saving === "linuxdo-bind" || (!linuxDoBound && !linuxDoAvailable)
+                }
+                onAction={linuxDoBound ? openLinuxDoUnlinkDialog : bindLinuxDo}
               />
               <SettingsRow
                 label="账号注销"
@@ -374,6 +471,7 @@ export default function SettingsPage() {
               label="两步验证"
               value={twoFactorEnabled ? "已启用" : "未启用"}
             />
+            <InfoLine label="LinuxDo" value={linuxDoSummary} />
           </CardContent>
         </Card>
       </div>
@@ -607,6 +705,56 @@ export default function SettingsPage() {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={dialog === "linuxdo-unlink"} onOpenChange={(open) => !open && closeDialog()}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>解绑 LinuxDo</DialogTitle>
+            <DialogDescription>
+              解绑后将无法继续使用该 LinuxDo 账号登录当前账号。
+            </DialogDescription>
+          </DialogHeader>
+          <FieldGroup>
+            {!hasPassword && (
+              <Alert>
+                <IconShieldCheck />
+                <AlertTitle>请先设置密码后再解绑 LinuxDo</AlertTitle>
+              </Alert>
+            )}
+            {hasPassword && (
+              <Field>
+                <FieldLabel htmlFor="linuxdo-password">当前密码</FieldLabel>
+                <Input
+                  id="linuxdo-password"
+                  type="password"
+                  value={linuxDoPassword}
+                  onChange={(event) => setLinuxDoPassword(event.target.value)}
+                  autoComplete="current-password"
+                />
+              </Field>
+            )}
+          </FieldGroup>
+          <DialogFooter>
+            <Button variant="outline" onClick={closeDialog}>
+              取消
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={unlinkLinuxDo}
+              disabled={
+                saving === "linuxdo-unlink" || !hasPassword || !linuxDoPassword
+              }
+            >
+              {saving === "linuxdo-unlink" ? (
+                <IconLoader2 data-icon="inline-start" />
+              ) : (
+                <IconUnlink data-icon="inline-start" />
+              )}
+              解绑
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={dialog === "delete"} onOpenChange={(open) => !open && closeDialog()}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -732,6 +880,7 @@ function SettingsRow({
   badge,
   actionLabel,
   actionVariant = "outline",
+  actionDisabled = false,
   onAction,
 }: {
   label: string
@@ -739,6 +888,7 @@ function SettingsRow({
   badge?: string
   actionLabel: string
   actionVariant?: "outline" | "destructive"
+  actionDisabled?: boolean
   onAction: () => void
 }) {
   return (
@@ -760,6 +910,7 @@ function SettingsRow({
         type="button"
         variant={actionVariant}
         size="sm"
+        disabled={actionDisabled}
         onClick={onAction}
       >
         {actionLabel}

@@ -3,11 +3,8 @@
 import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import {
-  IconAlertCircle,
   IconClipboardList,
-  IconDownload,
   IconLoader2,
-  IconPlayerPlay,
   IconRefresh,
   IconSearch,
   IconTrash,
@@ -17,6 +14,7 @@ import { toast } from "sonner"
 import { useCurrentUser } from "@/components/auth-gate"
 import { PageHeading } from "@/components/page-heading"
 import { StatusBadge } from "@/components/status-badge"
+import { TaskDetailDialog } from "@/components/task-detail-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -60,7 +58,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { api, apiPath } from "@/lib/api"
+import { api } from "@/lib/api"
 import type { AudioModule, AudioTask, TaskStatus } from "@/lib/types"
 
 const moduleLabels: Record<AudioModule, string> = {
@@ -78,19 +76,6 @@ const statusLabels: Record<TaskStatus, string> = {
 }
 
 type FilterValue = "all"
-
-const audioOutputModules = new Set<AudioModule>([
-  "speech-synthesis",
-  "voice-design",
-  "voice-clone",
-])
-
-const moduleOutputLabels: Record<AudioModule, string> = {
-  "speech-recognition": "下载逐字稿",
-  "speech-synthesis": "下载音频",
-  "voice-design": "下载样音",
-  "voice-clone": "下载验证音频",
-}
 
 export default function TasksPage() {
   const router = useRouter()
@@ -456,7 +441,7 @@ export default function TasksPage() {
                         {task.createdAt}
                       </TableCell>
                       <TableCell className="text-right">
-                        <TaskDetailDialog task={task} />
+                        <TaskDetailDialog task={task} showUser />
                       </TableCell>
                       <TableCell className="text-right">
                         <Dialog>
@@ -512,200 +497,4 @@ export default function TasksPage() {
       </Card>
     </>
   )
-}
-
-function TaskDetailDialog({ task }: { task: AudioTask }) {
-  const canPlay =
-    task.status === "completed" &&
-    Boolean(task.outputUrl) &&
-    audioOutputModules.has(task.module)
-
-  return (
-    <Dialog>
-      <DialogTrigger asChild>
-        <Button variant="ghost" size="sm">
-          <IconPlayerPlay data-icon="inline-start" />
-          详情
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="sm:max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>{task.title}</DialogTitle>
-          <DialogDescription>{task.summary ?? "暂无结果摘要。"}</DialogDescription>
-        </DialogHeader>
-
-        <div className="grid gap-3 md:grid-cols-2">
-          <DetailItem label="任务编号" value={task.id} />
-          <DetailItem label="模块" value={moduleLabels[task.module]} />
-          <DetailItem label="状态" value={statusLabels[task.status]} />
-          <DetailItem label="进度" value={`${task.progress}%`} />
-          <DetailItem
-            label="用户"
-            value={task.userName ?? task.userEmail ?? task.userId ?? "-"}
-          />
-          <DetailItem label="邮箱" value={task.userEmail ?? "-"} />
-          <DetailItem label="创建时间" value={task.createdAt ?? "-"} />
-          <DetailItem label="开始时间" value={task.startedAt ?? "-"} />
-          <DetailItem label="完成时间" value={task.completedAt ?? "-"} />
-          <DetailItem label="文件名称" value={task.fileName ?? "-"} />
-          <DetailItem label="文件类型" value={task.fileMimeType ?? "-"} />
-          <DetailItem
-            label="文件大小"
-            value={
-              typeof task.fileSize === "number"
-                ? formatFileSize(task.fileSize)
-                : "-"
-            }
-          />
-          <DetailItem
-            label="接口来源"
-            value={apiConfigSourceLabel(task.apiConfigSource)}
-          />
-          <DetailItem
-            label="计费状态"
-            value={billingStatusLabel(task.billable)}
-          />
-        </div>
-
-        <div className="rounded-lg border bg-muted/30 p-4">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <div className="font-medium">处理结果</div>
-            <Badge variant="secondary">{moduleLabels[task.module]}</Badge>
-          </div>
-          <Progress value={task.progress} className="mb-4 h-1.5" />
-          {canPlay && <TaskAudioPlayback task={task} />}
-          <div className="mt-4 flex flex-wrap items-center gap-2">
-            {task.outputUrl ? (
-              <Button asChild>
-                <a href={apiPath(task.outputUrl)} download>
-                  <IconDownload data-icon="inline-start" />
-                  {moduleOutputLabels[task.module] ?? "下载结果"}
-                </a>
-              </Button>
-            ) : (
-              <Button disabled variant="outline">
-                <IconDownload data-icon="inline-start" />
-                暂无结果
-              </Button>
-            )}
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-function apiConfigSourceLabel(source: AudioTask["apiConfigSource"]) {
-  if (source === "user") return "个人配置"
-  if (source === "system") return "系统配置"
-  return "-"
-}
-
-function billingStatusLabel(billable: AudioTask["billable"]) {
-  if (billable === true) return "计入额度"
-  if (billable === false) return "不计入额度"
-  return "-"
-}
-
-function DetailItem({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="min-w-0 rounded-lg border bg-card px-3 py-2">
-      <div className="text-xs text-muted-foreground">{label}</div>
-      <div className="mt-1 truncate text-sm font-medium" title={value}>
-        {value}
-      </div>
-    </div>
-  )
-}
-
-function TaskAudioPlayback({ task }: { task: AudioTask }) {
-  const [source, setSource] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    let active = true
-    let objectUrl: string | null = null
-
-    async function loadAudio() {
-      if (!task.outputUrl) {
-        setLoading(false)
-        return
-      }
-
-      setLoading(true)
-      setError(null)
-
-      try {
-        const response = await fetch(apiPath(task.outputUrl), {
-          credentials: "include",
-          headers: {
-            Accept: "audio/*,application/octet-stream",
-          },
-        })
-
-        if (!response.ok) {
-          throw new Error(`音频加载失败：${response.status}`)
-        }
-
-        const blob = await response.blob()
-        objectUrl = URL.createObjectURL(blob)
-
-        if (active) {
-          setSource(objectUrl)
-        }
-      } catch (loadError) {
-        if (active) {
-          setError(
-            loadError instanceof Error ? loadError.message : "音频加载失败"
-          )
-        }
-      } finally {
-        if (active) {
-          setLoading(false)
-        }
-      }
-    }
-
-    void loadAudio()
-
-    return () => {
-      active = false
-      if (objectUrl) {
-        URL.revokeObjectURL(objectUrl)
-      }
-    }
-  }, [task.outputUrl])
-
-  return (
-    <div className="rounded-lg border bg-background p-3">
-      {loading && (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <IconLoader2 className="size-4 animate-spin" />
-          音频加载中
-        </div>
-      )}
-      {!loading && error && (
-        <div className="flex items-center gap-2 text-sm text-destructive">
-          <IconAlertCircle className="size-4" />
-          {error}
-        </div>
-      )}
-      {!loading && source && (
-        <audio className="w-full" controls preload="metadata" src={source} />
-      )}
-    </div>
-  )
-}
-
-function formatFileSize(size: number) {
-  if (size < 1024) {
-    return `${size} B`
-  }
-
-  if (size < 1024 * 1024) {
-    return `${(size / 1024).toFixed(1)} KB`
-  }
-
-  return `${(size / 1024 / 1024).toFixed(1)} MB`
 }

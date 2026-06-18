@@ -6,9 +6,11 @@ use App\Http\Controllers\AccountController;
 use App\Http\Controllers\AnnouncementController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\BillingController;
+use App\Http\Controllers\HealthController;
 use App\Http\Controllers\InstallController;
 use App\Http\Controllers\MimoController;
 use App\Http\Controllers\QuotaController;
+use App\Http\Controllers\UpdateController;
 use App\Http\Controllers\UserConfigController;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -19,6 +21,11 @@ Route::get('/csrf-token', function (Request $request): JsonResponse {
         'token' => $request->session()->token(),
     ]);
 });
+Route::get('/health', [HealthController::class, 'show']);
+Route::get('/basic-info', [AdminOverviewController::class, 'basicInfo']);
+Route::get('/audio-retention', [AdminOverviewController::class, 'audioRetention']);
+Route::get('/site-icons/{filename}', [AdminOverviewController::class, 'siteIcon'])
+    ->where('filename', '[A-Za-z0-9._-]+');
 Route::get('/auth/linuxdo/redirect', [AuthController::class, 'redirect']);
 Route::get('/auth/linuxdo/callback', [AuthController::class, 'callback']);
 Route::middleware('throttle:10,1')->group(function (): void {
@@ -33,6 +40,8 @@ Route::get('/billing/notify', [BillingController::class, 'notify']);
 Route::post('/billing/notify', [BillingController::class, 'notify']);
 
 Route::middleware('auth.api')->group(function (): void {
+    Route::get('/account/linuxdo/redirect', [AccountController::class, 'linuxDoRedirect']);
+    Route::delete('/account/linuxdo', [AccountController::class, 'unlinkLinuxDo']);
     Route::put('/account/profile', [AccountController::class, 'updateProfile']);
     Route::put('/account/email', [AccountController::class, 'updateEmail']);
     Route::put('/account/password', [AccountController::class, 'updatePassword']);
@@ -69,14 +78,20 @@ Route::middleware(['auth.api', 'admin'])->group(function (): void {
     Route::put('/admin/billing-config', [BillingController::class, 'adminUpdate']);
     Route::get('/admin/basic-info', [AdminOverviewController::class, 'basicInfo']);
     Route::put('/admin/basic-info', [AdminOverviewController::class, 'updateBasicInfo']);
+    Route::post('/admin/basic-icon', [AdminOverviewController::class, 'uploadBasicIcon']);
+    Route::get('/admin/audio-retention', [AdminOverviewController::class, 'audioRetention']);
+    Route::put('/admin/audio-retention', [AdminOverviewController::class, 'updateAudioRetention']);
     Route::get('/admin/users', [AdminOverviewController::class, 'users']);
     Route::put('/admin/users/{user}', [AdminOverviewController::class, 'updateUser']);
+    Route::post('/admin/users/{user}/quota-adjustments', [AdminOverviewController::class, 'adjustQuota']);
     Route::post('/admin/users/bulk', [AdminOverviewController::class, 'bulkUsers']);
     Route::get('/admin/jobs', [AdminOverviewController::class, 'allJobs']);
     Route::post('/admin/jobs/bulk-delete', [MimoController::class, 'bulkDestroy']);
     Route::delete('/admin/jobs/{audioJob}', [MimoController::class, 'destroy']);
     Route::get('/admin/audits', [AdminOverviewController::class, 'audits']);
     Route::get('/admin/settings', [AdminOverviewController::class, 'settings']);
+    Route::get('/admin/update/status', [UpdateController::class, 'status']);
+    Route::post('/admin/update/upgrade', [UpdateController::class, 'upgrade']);
     Route::get('/admin/announcements', [AnnouncementController::class, 'adminIndex']);
     Route::post('/admin/announcements', [AnnouncementController::class, 'store']);
     Route::put('/admin/announcements/{announcement}', [AnnouncementController::class, 'update']);

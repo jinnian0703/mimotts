@@ -8,6 +8,7 @@ use App\Services\MailConfigService;
 use App\Services\WebInstallService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Schema;
 use Throwable;
 
 class InstallController
@@ -17,7 +18,13 @@ class InstallController
         try {
             return response()->json(array_merge($install->status(), $webInstall->status()));
         } catch (Throwable $e) {
-            return response()->json($this->uninstalledStatus($webInstall));
+            report($e);
+
+            if ($this->looksUnmigrated()) {
+                return response()->json($this->uninstalledStatus($webInstall));
+            }
+
+            return response()->json($this->configErrorStatus($webInstall));
         }
     }
 
@@ -88,6 +95,7 @@ class InstallController
 
         $emailAuth = $data['email_auth'] ?? [];
         $baseUrl = $this->baseUrl($request);
+        $linuxDoRedirectUri = $data['linuxdo_redirect_uri'] ?? $this->defaultLinuxDoRedirectUri($request, $baseUrl);
 
         try {
             $admin = $webInstall->install([
@@ -104,7 +112,7 @@ class InstallController
                 'db_password' => $data['db_password'] ?? '',
                 'linuxdo_client_id' => $data['linuxdo_client_id'] ?? '',
                 'linuxdo_client_secret' => $data['linuxdo_client_secret'] ?? '',
-                'linuxdo_redirect_uri' => $data['linuxdo_redirect_uri'] ?? rtrim($baseUrl, '/').'/api/auth/linuxdo/callback',
+                'linuxdo_redirect_uri' => $linuxDoRedirectUri,
                 'mimo_api_key' => $data['mimo_api_key'] ?? '',
                 'mimo_base_url' => $data['mimo_base_url'] ?? 'https://api.xiaomimimo.com/v1',
                 'email_config' => [
@@ -144,7 +152,7 @@ class InstallController
                 'mail_password' => $emailAuth['smtp_password'] ?? $data['smtp_password'] ?? '',
                 'mail_encryption' => $emailAuth['smtp_encryption'] ?? $data['smtp_encryption'] ?? 'tls',
                 'mail_from_address' => $emailAuth['mail_from_address'] ?? $data['mail_from_address'] ?? '',
-                'mail_from_name' => $emailAuth['mail_from_name'] ?? $data['mail_from_name'] ?? 'Mimo',
+                'mail_from_name' => $emailAuth['mail_from_name'] ?? $data['mail_from_name'] ?? 'MimoTTS',
             ]);
         } catch (Throwable $e) {
             report($e);
@@ -180,7 +188,12 @@ class InstallController
     {
         $data = $request->validate([
             'enabled' => ['sometimes', 'boolean'],
+            'registration_enabled' => ['sometimes', 'boolean'],
             'verification_required' => ['sometimes', 'boolean'],
+            'linuxdo_enabled' => ['sometimes', 'boolean'],
+            'linuxdo_client_id' => ['nullable', 'string', 'max:255'],
+            'linuxdo_client_secret' => ['nullable', 'string', 'max:4096'],
+            'linuxdo_redirect_uri' => ['nullable', 'url', 'max:2048'],
             'driver' => ['nullable', 'in:smtp,api'],
             'smtp_host' => ['nullable', 'string', 'max:255'],
             'smtp_port' => ['nullable', 'integer', 'min:1', 'max:65535'],
@@ -203,8 +216,10 @@ class InstallController
         $currentApi = $current['api'] ?? [];
         $currentSender = $current['sender'] ?? [];
         $currentTemplates = $current['templates'] ?? [];
+        $currentLinuxDo = $install->linuxDoConfigForUpdate();
         $install->setEmailAuthConfig([
             'enabled' => array_key_exists('enabled', $data) ? $request->boolean('enabled') : (bool) ($current['enabled'] ?? false),
+            'registration_enabled' => array_key_exists('registration_enabled', $data) ? $request->boolean('registration_enabled') : (bool) ($current['registration_enabled'] ?? true),
             'verification_required' => array_key_exists('verification_required', $data) ? $request->boolean('verification_required') : (bool) ($current['verification_required'] ?? false),
             'driver' => $data['driver'] ?? ($current['driver'] ?? 'smtp'),
             'smtp' => [
@@ -233,6 +248,12 @@ class InstallController
                     'body' => array_key_exists('two_factor_body', $data) ? $data['two_factor_body'] : ($currentTemplates['two_factor']['body'] ?? null),
                 ],
             ],
+        ]);
+        $install->setLinuxDoConfig([
+            'enabled' => array_key_exists('linuxdo_enabled', $data) ? $request->boolean('linuxdo_enabled') : (bool) ($currentLinuxDo['enabled'] ?? true),
+            'client_id' => array_key_exists('linuxdo_client_id', $data) ? ($data['linuxdo_client_id'] ?? null) : ($currentLinuxDo['client_id'] ?? null),
+            'client_secret' => ! empty($data['linuxdo_client_secret']) ? $data['linuxdo_client_secret'] : ($currentLinuxDo['client_secret'] ?? null),
+            'redirect_uri' => array_key_exists('linuxdo_redirect_uri', $data) ? ($data['linuxdo_redirect_uri'] ?? null) : ($currentLinuxDo['redirect_uri'] ?? null),
         ]);
         $audit->record($request, 'email_auth_config.update');
 
@@ -310,7 +331,7 @@ class InstallController
             return response()->json([
                 'error' => [
                     'code' => 'EmailAuthTestFailed',
-                    'message' => '测试邮件发送失败：'.$e->getMessage(),
+                    'message' => '测试邮件发送失败，请检查邮件配置',
                 ],
             ], 422);
         }
@@ -332,26 +353,76 @@ class InstallController
         return $scheme.'://'.$request->getHttpHost();
     }
 
+    private function defaultLinuxDoRedirectUri(Request $request, string $baseUrl): string
+    {
+        $scriptName = (string) $request->server('SCRIPT_NAME', '');
+        $path = basename($scriptName) === 'api.php'
+            ? '/api.php?r=/auth/linuxdo/callback'
+            : '/api/auth/linuxdo/callback';
+
+        return rtrim($baseUrl, '/').$path;
+    }
+
     private function uninstalledStatus(WebInstallService $webInstall): array
     {
         return array_merge([
             'installed' => false,
+            'install_state' => InstallService::STATE_UNINSTALLED,
+            'installState' => InstallService::STATE_UNINSTALLED,
+            'state_message' => '系统未安装',
+            'stateMessage' => '系统未安装',
+            'missing_config' => [],
+            'missingConfig' => [],
+            'build' => app(\App\Services\BuildInfoService::class)->info(),
             'admin_bound' => false,
             'administratorBound' => false,
             'mimo_configured' => false,
             'linuxdo_configured' => false,
             'linuxDoConfigured' => false,
+            'linuxdo_login_enabled' => false,
+            'linuxDoLoginEnabled' => false,
+            'registration_enabled' => true,
+            'registrationEnabled' => true,
             'email_login_enabled' => false,
             'email_auth_enabled' => false,
             'emailLoginEnabled' => false,
             'emailAuthEnabled' => false,
             'email_auth' => [
                 'enabled' => false,
+                'registration_enabled' => true,
                 'verification_required' => false,
                 'smtp_configured' => false,
                 'sender_configured' => false,
+                'linuxdo' => [
+                    'enabled' => true,
+                    'client_id' => null,
+                    'client_secret_configured' => false,
+                    'redirect_uri' => null,
+                    'configured' => false,
+                ],
             ],
         ], $webInstall->status());
+    }
+
+    private function configErrorStatus(WebInstallService $webInstall): array
+    {
+        return array_merge($this->uninstalledStatus($webInstall), [
+            'install_state' => InstallService::STATE_CONFIG_ERROR,
+            'installState' => InstallService::STATE_CONFIG_ERROR,
+            'state_message' => '系统配置读取异常，请检查 APP_KEY、数据库和已保存的加密配置',
+            'stateMessage' => '系统配置读取异常，请检查 APP_KEY、数据库和已保存的加密配置',
+            'config_error' => true,
+            'configError' => true,
+        ]);
+    }
+
+    private function looksUnmigrated(): bool
+    {
+        try {
+            return ! Schema::hasTable('users') || ! Schema::hasTable('system_settings');
+        } catch (Throwable $e) {
+            return false;
+        }
     }
 
 }

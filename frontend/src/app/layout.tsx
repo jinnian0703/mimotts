@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Mimo",
+  title: "MimoTTS",
   description: "音频任务工作台",
 };
 

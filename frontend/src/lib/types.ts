@@ -29,16 +29,92 @@ export type User = {
 
 export type InstallStatus = {
   installed: boolean
+  install_state?: "uninstalled" | "installed" | "installed_needs_config" | "config_error"
+  installState?: "uninstalled" | "installed" | "installed_needs_config" | "config_error"
+  state_message?: string
+  stateMessage?: string
+  missing_config?: string[]
+  missingConfig?: string[]
+  config_error?: boolean
+  configError?: boolean
+  build?: BuildInfo
   administratorBound?: boolean
   admin_bound?: boolean
   mimo_configured?: boolean
   linuxDoConfigured?: boolean
   linuxdo_configured?: boolean
+  linuxDoLoginEnabled?: boolean
+  linuxdo_login_enabled?: boolean
+  registrationEnabled?: boolean
+  registration_enabled?: boolean
   emailAuthEnabled?: boolean
   email_auth_enabled?: boolean
   email_configured?: boolean
   php_version?: string
   checks?: Record<string, boolean>
+}
+
+export type BuildInfo = {
+  version?: string | null
+  built_at?: string | null
+  builtAt?: string | null
+  commit?: string | null
+}
+
+export type UpdateLatestInfo = {
+  ok: boolean
+  version?: string | null
+  commit?: string | null
+  built_at?: string | null
+  published_at?: string | null
+  changelog_url?: string | null
+  source_zip_url?: string | null
+  source_sha256?: string | null
+  docker_image?: string | null
+  migration_required?: boolean
+  body?: string | null
+  manifest_url?: string | null
+  error?: string | null
+}
+
+export type UpdateStatus = {
+  current: BuildInfo
+  latest: UpdateLatestInfo
+  update_available: boolean
+  updateAvailable?: boolean
+  deployment: {
+    mode: "source" | "docker"
+    label: string
+  }
+  executor: {
+    enabled: boolean
+    message: string
+  }
+  commands: string[]
+  checked_at?: string
+  checkedAt?: string
+}
+
+export type UpdateUpgradeResult = {
+  executed: boolean
+  message: string
+  pid?: string | null
+  log_path?: string | null
+  commands: string[]
+  status: UpdateStatus
+}
+
+export type HealthCheck = {
+  ok: boolean
+  message: string
+}
+
+export type HealthReport = {
+  status: "ok" | "degraded" | "error"
+  checked_at?: string
+  checkedAt?: string
+  build?: BuildInfo
+  checks: Record<string, HealthCheck>
 }
 
 export type MimoConfig = {
@@ -52,11 +128,14 @@ export type BasicInfoConfig = {
   system_name?: string | null
   site_title?: string | null
   site_subtitle?: string | null
+  icon_url?: string | null
+  iconUrl?: string | null
   app_url?: string | null
   frontend_url?: string | null
   icp_record?: string | null
   footer_text?: string | null
   support_email?: string | null
+  build?: BuildInfo
 }
 
 export type EmailEncryption = "none" | "tls" | "ssl"
@@ -65,6 +144,7 @@ export type EmailApiProvider = "generic_json" | "resend"
 
 export type EmailAuthConfig = {
   enabled: boolean
+  registration_enabled?: boolean
   verification_required?: boolean
   driver?: EmailDriver
   smtp_host?: string
@@ -128,6 +208,16 @@ export type EmailRegisterPayload = EmailLoginPayload & {
 
 export type TaskStatus = "queued" | "running" | "completed" | "failed"
 
+export type TaskSummaryItem = {
+  label: string
+  value?: string | number | boolean | null
+}
+
+export type TaskRequestSummary = {
+  sections?: TaskSummaryItem[]
+  options?: TaskSummaryItem[]
+}
+
 export type AudioTask = {
   id: string
   module: AudioModule
@@ -139,6 +229,8 @@ export type AudioTask = {
   completedAt?: string | null
   outputUrl?: string
   summary?: string
+  errorMessage?: string | null
+  requestSummary?: TaskRequestSummary | null
   userId?: string
   userName?: string | null
   userEmail?: string | null
@@ -196,9 +288,27 @@ export type SystemSetting = {
   updatedAt: string
 }
 
+export type AudioRetentionConfig = {
+  enabled: boolean
+  retention_days: number
+  retentionDays?: number
+  last_pruned_at?: string | null
+  lastPrunedAt?: string | null
+  last_pruned_count?: number
+  lastPrunedCount?: number
+}
+
 export type EmailAuthConfigState = {
   enabled: boolean
+  registration_enabled?: boolean
   verification_required?: boolean
+  linuxdo?: {
+    enabled?: boolean
+    client_id?: string | null
+    client_secret_configured?: boolean
+    redirect_uri?: string | null
+    configured?: boolean
+  }
   driver?: EmailDriver
   smtp?: {
     host?: string | null
@@ -266,6 +376,8 @@ export type BillingConfig = {
   notify_url?: string | null
   return_url?: string | null
   plans_json?: string
+  plans_revision?: number
+  plans_history?: Array<Record<string, unknown>>
 }
 
 export type BillingCheckout = {
@@ -284,6 +396,7 @@ export type QuotaRecord = {
   amount: number
   balanceAfter: number
   description?: string | null
+  metadata?: Record<string, unknown>
   audioJobId?: string | null
   createdAt?: string | null
 }

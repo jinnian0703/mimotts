@@ -19,7 +19,7 @@ class EmailVerificationService
         $templateService = app(EmailTemplateService::class);
         $template = $templateService->template($emailConfig, EmailTemplateService::VERIFICATION);
         $variables = [
-            'app_name' => config('app.name', 'Mimo'),
+            'app_name' => config('app.name', 'MimoTTS'),
             'user_name' => $user->name,
             'email' => $user->email,
             'verification_url' => $url,

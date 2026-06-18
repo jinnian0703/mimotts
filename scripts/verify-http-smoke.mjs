@@ -9,7 +9,7 @@ const checks = [
     name: 'application health endpoint',
     method: 'GET',
     path: '/api/health',
-    allowed: strict ? [200] : [200, 204, 404],
+    allowed: strict ? [200] : [200, 503],
   },
   {
     name: 'installation status endpoint',
@@ -33,7 +33,7 @@ const checks = [
   {
     name: 'ASR endpoint rejects unauthenticated request without calling upstream',
     method: 'POST',
-    path: '/api/audio/asr',
+    path: '/api/mimo/asr',
     allowed: [400, 401, 403, 404, 422],
     reject: [500, 502, 503, 504],
     body: { file_id: 'smoke-test-placeholder' },
@@ -41,7 +41,7 @@ const checks = [
   {
     name: 'TTS endpoint rejects unauthenticated request without calling upstream',
     method: 'POST',
-    path: '/api/audio/tts',
+    path: '/api/mimo/tts',
     allowed: [400, 401, 403, 404, 422],
     reject: [500, 502, 503, 504],
     body: { text: 'smoke test', voice_id: 'placeholder' },
@@ -49,7 +49,7 @@ const checks = [
   {
     name: 'voice design endpoint rejects unauthenticated request without calling upstream',
     method: 'POST',
-    path: '/api/audio/voice-design',
+    path: '/api/mimo/voice-design',
     allowed: [400, 401, 403, 404, 422],
     reject: [500, 502, 503, 504],
     body: { prompt: 'clear studio narration' },
@@ -57,7 +57,7 @@ const checks = [
   {
     name: 'voice clone endpoint rejects unauthenticated request without calling upstream',
     method: 'POST',
-    path: '/api/audio/voice-clone',
+    path: '/api/mimo/voice-clone',
     allowed: [400, 401, 403, 404, 422],
     reject: [500, 502, 503, 504],
     body: { sample_id: 'smoke-test-placeholder' },

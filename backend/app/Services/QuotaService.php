@@ -213,7 +213,45 @@ class QuotaService
                 'amount' => $delta,
                 'balance_after' => $normalizedBalance,
                 'description' => $description,
-                'metadata' => $metadata,
+                'metadata' => array_merge($metadata, [
+                    'mode' => 'set',
+                    'previous_balance' => $currentBalance,
+                    'new_balance' => $normalizedBalance,
+                ]),
+            ]);
+        });
+    }
+
+    public function adjustByDelta(User $user, int $delta, string $description, array $metadata = []): ?QuotaLedgerEntry
+    {
+        if ($delta === 0) {
+            return null;
+        }
+
+        return DB::transaction(function () use ($user, $delta, $description, $metadata): QuotaLedgerEntry {
+            $lockedUser = User::query()->whereKey($user->id)->lockForUpdate()->firstOrFail();
+            $currentBalance = (int) $lockedUser->quota_balance;
+            $balanceAfter = $currentBalance + $delta;
+
+            if ($balanceAfter < 0) {
+                throw new RuntimeException('额度不能小于 0');
+            }
+
+            $lockedUser->forceFill(['quota_balance' => $balanceAfter])->save();
+
+            return QuotaLedgerEntry::create([
+                'user_id' => $lockedUser->id,
+                'audio_job_id' => null,
+                'type' => self::TYPE_ADJUST,
+                'module' => null,
+                'amount' => $delta,
+                'balance_after' => $balanceAfter,
+                'description' => $description,
+                'metadata' => array_merge($metadata, [
+                    'mode' => 'delta',
+                    'previous_balance' => $currentBalance,
+                    'new_balance' => $balanceAfter,
+                ]),
             ]);
         });
     }
@@ -338,6 +376,7 @@ class QuotaService
             'amount' => (int) $entry->amount,
             'balanceAfter' => (int) $entry->balance_after,
             'description' => $entry->description,
+            'metadata' => $entry->metadata ?? [],
             'audioJobId' => $entry->audio_job_id ? (string) $entry->audio_job_id : null,
             'createdAt' => $entry->created_at
                 ? $entry->created_at->copy()->timezone(config('app.task_timezone', 'Asia/Shanghai'))->format('Y-m-d H:i:s')

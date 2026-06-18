@@ -45,10 +45,11 @@ class WebInstallService
 
     public function install(array $data): User
     {
-        $this->assertEnvironment();
+        $this->assertEnvironment($data);
         $this->testDatabase($data);
-        $appKey = (string) config('app.key');
+        $appKey = $this->applicationKey();
         $this->applyRuntimeConfig($data, $appKey);
+        $this->persistEnvironmentConfig($data, $appKey);
         $this->runMigrations();
 
         $admin = User::query()->create([
@@ -69,10 +70,11 @@ class WebInstallService
         }
 
         if (! empty($data['linuxdo_client_id']) && ! empty($data['linuxdo_client_secret'])) {
-            SystemSetting::putEncrypted('linuxdo_connect_config', [
+            SystemSetting::putEncrypted(InstallService::LINUXDO_AUTH_KEY, [
+                'enabled' => true,
                 'client_id' => $data['linuxdo_client_id'] ?? '',
                 'client_secret' => $data['linuxdo_client_secret'] ?? '',
-                'redirect_uri' => $data['linuxdo_redirect_uri'] ?? rtrim($data['app_url'], '/').'/api/auth/linuxdo/callback',
+                'redirect_uri' => $data['linuxdo_redirect_uri'] ?? $this->defaultLinuxDoRedirectUri($data['app_url']),
             ]);
         }
 
@@ -101,10 +103,20 @@ class WebInstallService
         }
     }
 
-    private function assertEnvironment(): void
+    private function assertEnvironment(array $data): void
     {
         $status = $this->status();
+        $connection = $this->databaseConnection($data);
+
         foreach ($status['checks'] as $key => $passed) {
+            if ($key === 'pdo_sqlite' && $connection !== 'sqlite') {
+                continue;
+            }
+
+            if ($key === 'pdo_mysql' && $connection !== 'mysql') {
+                continue;
+            }
+
             if (! $passed) {
                 throw new RuntimeException($this->checkMessage($key));
             }
@@ -150,9 +162,130 @@ class WebInstallService
         Config::set('sanctum.stateful', $this->statefulDomains($data['frontend_url'], $data['app_url']));
         Config::set('services.linuxdo.client_id', $data['linuxdo_client_id'] ?? '');
         Config::set('services.linuxdo.client_secret', $data['linuxdo_client_secret'] ?? '');
-        Config::set('services.linuxdo.redirect_uri', $data['linuxdo_redirect_uri'] ?? rtrim($data['app_url'], '/').'/api/auth/linuxdo/callback');
+        Config::set('services.linuxdo.redirect_uri', $data['linuxdo_redirect_uri'] ?? $this->defaultLinuxDoRedirectUri($data['app_url']));
         Config::set('services.mimo.base_url', $data['mimo_base_url'] ?? 'https://api.xiaomimimo.com/v1');
         Config::set('services.mimo.api_key', $data['mimo_api_key'] ?? '');
+    }
+
+    private function persistEnvironmentConfig(array $data, string $appKey): void
+    {
+        $path = base_path('.env');
+        $lines = is_file($path) ? file($path, FILE_IGNORE_NEW_LINES) : [];
+
+        if ($lines === false) {
+            throw new RuntimeException('无法读取 backend/.env');
+        }
+
+        $content = $this->mergeEnvironmentLines($lines, $this->environmentValues($data, $appKey));
+
+        if (file_put_contents($path, $content, LOCK_EX) === false) {
+            throw new RuntimeException('无法写入 backend/.env，请检查文件权限');
+        }
+    }
+
+    private function environmentValues(array $data, string $appKey): array
+    {
+        $connection = $this->databaseConnection($data);
+        $emailConfig = $data['email_config'] ?? [];
+        $smtp = $emailConfig['smtp'] ?? [];
+        $sender = $emailConfig['sender'] ?? [];
+        $linuxDoRedirectUri = $data['linuxdo_redirect_uri'] ?? $this->defaultLinuxDoRedirectUri($data['app_url']);
+
+        $values = [
+            'APP_NAME' => config('app.name', 'MimoTTS'),
+            'APP_ENV' => config('app.env', 'production'),
+            'APP_KEY' => $appKey,
+            'APP_DEBUG' => config('app.debug') ? 'true' : 'false',
+            'APP_URL' => $data['app_url'],
+            'FRONTEND_URL' => $data['frontend_url'],
+            'DB_CONNECTION' => $connection,
+            'DB_DATABASE' => $data['db_database'] ?? config('database.connections.'.$connection.'.database'),
+            'SESSION_SECURE_COOKIE' => Str::startsWith($data['app_url'], 'https://') ? 'true' : 'false',
+            'SESSION_SAME_SITE' => 'lax',
+            'SANCTUM_STATEFUL_DOMAINS' => implode(',', $this->statefulDomains($data['frontend_url'], $data['app_url'])),
+            'CORS_ALLOWED_ORIGINS' => $data['frontend_url'],
+            'LINUXDO_CLIENT_ID' => $data['linuxdo_client_id'] ?? '',
+            'LINUXDO_CLIENT_SECRET' => $data['linuxdo_client_secret'] ?? '',
+            'LINUXDO_REDIRECT_URI' => $linuxDoRedirectUri,
+            'MIMO_BASE_URL' => $data['mimo_base_url'] ?? 'https://api.xiaomimimo.com/v1',
+            'MIMO_API_KEY' => $data['mimo_api_key'] ?? '',
+            'MAIL_MAILER' => $emailConfig['driver'] ?? 'smtp',
+            'MAIL_HOST' => $smtp['host'] ?? '',
+            'MAIL_PORT' => $smtp['port'] ?? 587,
+            'MAIL_USERNAME' => $smtp['username'] ?? '',
+            'MAIL_PASSWORD' => $smtp['password'] ?? '',
+            'MAIL_ENCRYPTION' => $smtp['encryption'] ?? 'tls',
+            'MAIL_FROM_ADDRESS' => $sender['address'] ?? '',
+            'MAIL_FROM_NAME' => $sender['name'] ?? 'MimoTTS',
+        ];
+
+        if ($connection === 'mysql') {
+            $values['DB_HOST'] = $data['db_host'] ?? config('database.connections.mysql.host');
+            $values['DB_PORT'] = $data['db_port'] ?? config('database.connections.mysql.port');
+            $values['DB_USERNAME'] = $data['db_username'] ?? config('database.connections.mysql.username');
+            $values['DB_PASSWORD'] = $data['db_password'] ?? config('database.connections.mysql.password');
+        }
+
+        return $values;
+    }
+
+    private function mergeEnvironmentLines(array $lines, array $values): string
+    {
+        $remaining = $values;
+        $merged = [];
+
+        foreach ($lines as $line) {
+            if (preg_match('/^\s*([A-Z0-9_]+)\s*=/', $line, $matches)) {
+                $key = $matches[1];
+
+                if (array_key_exists($key, $remaining)) {
+                    $merged[] = $key.'='.$this->formatEnvironmentValue($remaining[$key]);
+                    unset($remaining[$key]);
+                    continue;
+                }
+            }
+
+            $merged[] = $line;
+        }
+
+        if ($remaining) {
+            if ($merged && trim(end($merged)) !== '') {
+                $merged[] = '';
+            }
+
+            foreach ($remaining as $key => $value) {
+                $merged[] = $key.'='.$this->formatEnvironmentValue($value);
+            }
+        }
+
+        return implode("\n", $merged)."\n";
+    }
+
+    private function formatEnvironmentValue($value): string
+    {
+        if ($value === null) {
+            return '';
+        }
+
+        if (is_bool($value)) {
+            return $value ? 'true' : 'false';
+        }
+
+        $value = (string) $value;
+
+        if ($value === '') {
+            return '';
+        }
+
+        if (preg_match('/^[A-Za-z0-9_.:\/?&=@,\-]+$/', $value)) {
+            return $value;
+        }
+
+        return '"'.str_replace(
+            ["\\", '"', "\n", "\r"],
+            ["\\\\", '\"', '\n', ''],
+            $value
+        ).'"';
     }
 
     private function runMigrations(): void
@@ -182,6 +315,22 @@ class WebInstallService
     private function databaseConnection(array $data): string
     {
         return ($data['db_connection'] ?? config('database.default')) === 'mysql' ? 'mysql' : 'sqlite';
+    }
+
+    private function applicationKey(): string
+    {
+        $key = trim((string) config('app.key'));
+
+        if ($key === '' || $key === 'replace_with_generated_laravel_app_key') {
+            return 'base64:'.base64_encode(random_bytes(32));
+        }
+
+        return $key;
+    }
+
+    private function defaultLinuxDoRedirectUri(string $appUrl): string
+    {
+        return rtrim($appUrl, '/').'/api/auth/linuxdo/callback';
     }
 
     private function pathsWritable(array $paths): bool

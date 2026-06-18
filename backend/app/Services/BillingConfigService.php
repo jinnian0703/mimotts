@@ -51,6 +51,8 @@ class BillingConfigService
             'client_secret_configured' => ! empty($config['client_secret']),
             'notify_url' => $config['notify_url'],
             'return_url' => $config['return_url'],
+            'plans_revision' => (int) ($config['plans_revision'] ?? 1),
+            'plans_history' => $config['plans_history'] ?? [],
             'plans_json' => json_encode($config['plans'], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT),
         ]);
     }
@@ -65,6 +67,8 @@ class BillingConfigService
             $plans = is_array($decoded) ? $decoded : $current['plans'];
         }
         $plans = $this->plans($plans);
+        $plansRevision = (int) ($current['plans_revision'] ?? 1);
+        $plansHistory = is_array($current['plans_history'] ?? null) ? $current['plans_history'] : [];
         $quota = app(QuotaService::class);
         $planIds = array_map(fn (array $plan) => (string) $plan['id'], $plans);
         $defaultPlanId = (string) ($data['default_plan_id'] ?? $current['default_plan_id']);
@@ -72,18 +76,32 @@ class BillingConfigService
             $defaultPlanId = $planIds[0] ?? null;
         }
 
+        $creditMultiplier = max(0.01, (float) ($data['credit_multiplier'] ?? $current['credit_multiplier']));
+        if ($this->planFingerprint($plans, $creditMultiplier) !== $this->planFingerprint($current['plans'] ?? [], (float) ($current['credit_multiplier'] ?? 1))) {
+            $plansHistory[] = [
+                'revision' => $plansRevision,
+                'changed_at' => now()->toISOString(),
+                'credit_multiplier' => (float) ($current['credit_multiplier'] ?? 1),
+                'plans' => $current['plans'] ?? [],
+            ];
+            $plansHistory = array_slice($plansHistory, -20);
+            $plansRevision++;
+        }
+
         $config = [
             'enabled' => (bool) ($data['enabled'] ?? $current['enabled']),
             'gateway_url' => rtrim((string) (($data['gateway_url'] ?? null) ?: $current['gateway_url']), '/'),
             'client_id' => $data['client_id'] ?? $current['client_id'],
             'client_secret' => ! empty($data['client_secret']) ? $data['client_secret'] : $current['client_secret'],
-            'credit_multiplier' => max(0.01, (float) ($data['credit_multiplier'] ?? $current['credit_multiplier'])),
+            'credit_multiplier' => $creditMultiplier,
             'default_plan_id' => $defaultPlanId,
             'notify_url' => $data['notify_url'] ?? null,
             'return_url' => $data['return_url'] ?? null,
             'usage_costs' => $quota->normalizeUsageCosts($data['usage_costs'] ?? $current['usage_costs']),
             'checkin' => $quota->normalizeCheckinConfig($data['checkin'] ?? $current['checkin']),
             'plans' => $plans,
+            'plans_revision' => $plansRevision,
+            'plans_history' => $plansHistory,
         ];
 
         SystemSetting::putEncrypted(self::KEY, $config);
@@ -150,6 +168,8 @@ class BillingConfigService
                 ['id' => 'standard', 'name' => '标准版', 'quota' => 500, 'base_amount' => 45, 'enabled' => true],
                 ['id' => 'business', 'name' => '企业版', 'quota' => 2000, 'base_amount' => 160, 'enabled' => true],
             ],
+            'plans_revision' => 1,
+            'plans_history' => [],
         ];
     }
 
@@ -204,5 +224,13 @@ class BillingConfigService
     private function configured(array $config): bool
     {
         return ! empty($config['client_id']) && ! empty($config['client_secret']);
+    }
+
+    private function planFingerprint(array $plans, float $multiplier): string
+    {
+        return md5(json_encode([
+            'plans' => $this->plans($plans),
+            'credit_multiplier' => $multiplier,
+        ], JSON_UNESCAPED_UNICODE));
     }
 }

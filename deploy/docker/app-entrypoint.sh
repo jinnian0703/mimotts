@@ -11,6 +11,7 @@ fi
 mkdir -p \
   storage/app/audio \
   storage/app/private \
+  storage/app/public/site-icons \
   storage/framework/cache/data \
   storage/framework/sessions \
   storage/framework/views \

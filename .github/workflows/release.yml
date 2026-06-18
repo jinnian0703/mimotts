@@ -1,0 +1,91 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "7.4"
+          extensions: bcmath, intl, mbstring, pdo_mysql, pdo_sqlite, zip
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build source package
+        shell: pwsh
+        run: ./scripts/build-source-upload.ps1
+
+      - name: Prepare release manifest
+        id: manifest
+        shell: bash
+        run: |
+          cp dist/mimo-source-upload.zip dist/mimotts-source-upload.zip
+          VERSION="${GITHUB_REF_NAME}"
+          COMMIT="$(git rev-parse --short HEAD)"
+          BUILT_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          ZIP_SHA="$(sha256sum dist/mimotts-source-upload.zip | awk '{print $1}')"
+          REPO="${GITHUB_REPOSITORY}"
+          OWNER_LOWER="$(echo "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')"
+          cat > dist/latest.json <<JSON
+          {
+            "version": "$VERSION",
+            "commit": "$COMMIT",
+            "built_at": "$BUILT_AT",
+            "published_at": "$BUILT_AT",
+            "changelog_url": "https://github.com/$REPO/releases/tag/$VERSION",
+            "source_zip_url": "https://github.com/$REPO/releases/download/$VERSION/mimotts-source-upload.zip",
+            "source_sha256": "$ZIP_SHA",
+            "docker_image": "ghcr.io/$OWNER_LOWER/mimotts:$VERSION",
+            "migration_required": false
+          }
+          JSON
+          echo "built_at=$BUILT_AT" >> "$GITHUB_OUTPUT"
+          echo "image_name=ghcr.io/$OWNER_LOWER/mimotts" >> "$GITHUB_OUTPUT"
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/docker/app.Dockerfile
+          push: true
+          tags: |
+            ${{ steps.manifest.outputs.image_name }}:${{ github.ref_name }}
+            ${{ steps.manifest.outputs.image_name }}:latest
+          build-args: |
+            APP_VERSION=${{ github.ref_name }}
+            APP_BUILD_COMMIT=${{ github.sha }}
+            APP_BUILD_TIME=${{ steps.manifest.outputs.built_at }}
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/mimotts-source-upload.zip
+            dist/latest.json
+          generate_release_notes: true

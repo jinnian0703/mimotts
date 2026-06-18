@@ -8,6 +8,7 @@ use App\Services\AccountSecurityService;
 use App\Services\AuditLogger;
 use App\Services\EmailVerificationService;
 use App\Services\InstallService;
+use App\Services\LinuxDoOAuthService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -22,6 +23,59 @@ use Throwable;
 
 class AccountController
 {
+    public function linuxDoRedirect(Request $request, LinuxDoOAuthService $oauth): JsonResponse
+    {
+        if (! $oauth->configured()) {
+            return response()->json([
+                'error' => [
+                    'code' => 'LinuxDoConnectDisabled',
+                    'message' => 'LinuxDo Connect 未配置',
+                ],
+            ], 403);
+        }
+
+        $state = Str::random(40);
+        $request->session()->put('linuxdo_oauth_state', $state);
+        $request->session()->put('linuxdo_oauth_mode', 'bind');
+        $request->session()->put('linuxdo_oauth_user_id', $request->user()->id);
+
+        return response()->json([
+            'authorize_url' => $oauth->authorizationUrl($state),
+        ]);
+    }
+
+    public function unlinkLinuxDo(Request $request, AuditLogger $audit): JsonResponse
+    {
+        $user = $request->user();
+        $data = $request->validate([
+            'current_password' => ['nullable', 'string', 'max:128'],
+        ]);
+
+        if (! $user->has_password) {
+            return response()->json([
+                'error' => [
+                    'code' => 'PasswordRequiredBeforeUnlink',
+                    'message' => '请先设置密码后再解绑 LinuxDo',
+                ],
+            ], 422);
+        }
+
+        $this->requireCurrentPassword($user, $data['current_password'] ?? null);
+
+        if (! $user->linuxdo_id) {
+            return response()->json([
+                'user' => $user->fresh(),
+            ]);
+        }
+
+        $user->forceFill(['linuxdo_id' => null])->save();
+        $audit->record($request, 'account.linuxdo.unlink');
+
+        return response()->json([
+            'user' => $user->fresh(),
+        ]);
+    }
+
     public function updateProfile(Request $request, AuditLogger $audit): JsonResponse
     {
         $data = $request->validate([

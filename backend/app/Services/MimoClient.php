@@ -146,7 +146,7 @@ class MimoClient
         ];
 
         $speechRatePrompt = $ratePrompts[$speechRate] ?? null;
-        if (! $speechRatePrompt || str_contains($prompt, $speechRatePrompt)) {
+        if (! $speechRatePrompt || strpos($prompt, $speechRatePrompt) !== false) {
             return $prompt;
         }
 

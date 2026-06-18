@@ -1,8 +1,9 @@
 "use client"
 
 import Link from "next/link"
+import Image from "next/image"
 import { usePathname, useRouter } from "next/navigation"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import {
   IconAdjustments,
   IconBellRinging,
@@ -46,7 +47,7 @@ const adminNavItems = [
   { href: "/system-settings", label: "系统设置", icon: IconShieldLock },
 ]
 
-const repositoryUrl = "https://github.com/jinnian0703/mimo"
+const repositoryUrl = "https://github.com/jinnian0703/mimotts"
 
 function normalizePathname(pathname: string) {
   return pathname === "/" ? pathname : pathname.replace(/\/+$/, "")
@@ -58,9 +59,36 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const user = useCurrentUser()
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [desktopNavCollapsed, setDesktopNavCollapsed] = useState(false)
+  const [brand, setBrand] = useState({ name: "MimoTTS", iconUrl: "" })
   const currentPath = normalizePathname(pathname)
   const isPublic =
     currentPath === "/" || currentPath === "/login" || currentPath === "/install"
+
+  useEffect(() => {
+    if (isPublic) {
+      return
+    }
+
+    let cancelled = false
+
+    api
+      .basicInfo()
+      .then((config) => {
+        if (cancelled) {
+          return
+        }
+
+        setBrand({
+          name: config.system_name || config.site_title || "MimoTTS",
+          iconUrl: config.icon_url ?? config.iconUrl ?? "",
+        })
+      })
+      .catch(() => undefined)
+
+    return () => {
+      cancelled = true
+    }
+  }, [isPublic])
 
   async function handleLogout() {
     await api.logout().catch(() => undefined)
@@ -96,14 +124,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               "flex min-w-0 items-center gap-3",
               desktopNavCollapsed && "justify-center"
             )}
-            aria-label="Mimo"
+            aria-label="MimoTTS"
           >
-            <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-              <IconClipboardList />
-            </div>
+            <BrandIcon iconUrl={brand.iconUrl} />
             {!desktopNavCollapsed && (
               <div className="min-w-0">
-                <span className="font-heading text-lg font-semibold">Mimo</span>
+                <span className="font-heading text-lg font-semibold">
+                  {brand.name}
+                </span>
               </div>
             )}
           </Link>
@@ -264,7 +292,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             className="font-heading text-lg font-semibold"
             onClick={() => setMobileNavOpen(false)}
           >
-            Mimo
+            {brand.name}
           </Link>
           <Button
             variant="outline"
@@ -304,11 +332,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         >
           <div className="flex items-center justify-between gap-3 px-2">
             <div className="flex items-center gap-3">
-              <div className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-                <IconClipboardList />
-              </div>
+              <BrandIcon iconUrl={brand.iconUrl} />
               <div className="flex flex-col">
-                <span className="font-heading text-lg font-semibold">Mimo</span>
+                <span className="font-heading text-lg font-semibold">
+                  {brand.name}
+                </span>
               </div>
             </div>
             <div className="flex items-center gap-1">
@@ -393,6 +421,29 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           {children}
         </div>
       </main>
+    </div>
+  )
+}
+
+function BrandIcon({ iconUrl }: { iconUrl?: string | null }) {
+  const [failedUrl, setFailedUrl] = useState<string | null>(null)
+  const canRenderImage = Boolean(iconUrl) && failedUrl !== iconUrl
+
+  return (
+    <div className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-primary text-primary-foreground">
+      {canRenderImage && iconUrl ? (
+        <Image
+          src={iconUrl}
+          alt=""
+          width={36}
+          height={36}
+          unoptimized
+          className="size-full object-cover"
+          onError={() => setFailedUrl(iconUrl)}
+        />
+      ) : (
+        <IconClipboardList className="size-5" />
+      )}
     </div>
   )
 }

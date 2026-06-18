@@ -2,20 +2,20 @@
 
 import { useEffect, useRef, useState } from "react"
 import {
-  IconAlertCircle,
   IconClipboardList,
-  IconDownload,
   IconFileUpload,
   IconLoader2,
   IconPlayerPlay,
   IconRefresh,
   IconTrash,
+  IconClock,
 } from "@tabler/icons-react"
 import { toast } from "sonner"
 
-import { api, apiPath } from "@/lib/api"
-import type { AudioModule, AudioTask } from "@/lib/types"
+import { api } from "@/lib/api"
+import type { AudioModule, AudioRetentionConfig, AudioTask } from "@/lib/types"
 import { StatusBadge } from "@/components/status-badge"
+import { TaskDetailDialog } from "@/components/task-detail-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -112,16 +112,6 @@ const moduleLabels = Object.fromEntries(
   modules.map((module) => [module.value, module.label])
 ) as Record<AudioModule, string>
 
-const moduleOutputLabels = Object.fromEntries(
-  modules.map((module) => [module.value, module.outputLabel])
-) as Record<AudioModule, string>
-
-const audioOutputModules = new Set<AudioModule>([
-  "speech-synthesis",
-  "voice-design",
-  "voice-clone",
-])
-
 const ttsVoices = [
   { value: "mimo_default", label: "默认" },
   { value: "冰糖", label: "冰糖" },
@@ -194,13 +184,20 @@ export function AudioWorkbench() {
   const [activeModule, setActiveModule] =
     useState<AudioModule>("speech-recognition")
   const [loading, setLoading] = useState(true)
+  const [retention, setRetention] = useState<AudioRetentionConfig | null>(null)
 
   async function refreshTasks(notify = true) {
     setLoading(true)
 
     try {
-      const data = await api.tasks()
+      const [data, retentionConfig] = await Promise.all([
+        api.tasks(),
+        api.audioRetention().catch(() => null),
+      ])
       setTasks(data)
+      if (retentionConfig) {
+        setRetention(retentionConfig)
+      }
       if (notify) {
         toast.success("任务列表已更新")
       }
@@ -216,10 +213,14 @@ export function AudioWorkbench() {
 
     async function loadInitialTasks() {
       try {
-        const data = await api.tasks()
+        const [data, retentionConfig] = await Promise.all([
+          api.tasks(),
+          api.audioRetention().catch(() => null),
+        ])
 
         if (active) {
           setTasks(data)
+          setRetention(retentionConfig)
         }
       } catch (error) {
         if (active) {
@@ -311,6 +312,7 @@ export function AudioWorkbench() {
 
       <TaskTable
         tasks={tasks}
+        retention={retention}
         onDeleted={(taskId) =>
           setTasks((current) => current.filter((task) => task.id !== taskId))
         }
@@ -734,9 +736,11 @@ function SpeechRateField({ id }: { id: string }) {
 
 function TaskTable({
   tasks,
+  retention,
   onDeleted,
 }: {
   tasks: AudioTask[]
+  retention: AudioRetentionConfig | null
   onDeleted: (taskId: string) => void
 }) {
   const [deletingId, setDeletingId] = useState<string | null>(null)
@@ -773,8 +777,9 @@ function TaskTable({
 
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <CardTitle>任务列表</CardTitle>
+        <RetentionBadge retention={retention} />
       </CardHeader>
       <CardContent>
         <div className="overflow-x-auto">
@@ -786,122 +791,83 @@ function TaskTable({
                 <TableHead>状态</TableHead>
                 <TableHead>进度</TableHead>
                 <TableHead>提交时间</TableHead>
-                <TableHead className="text-right">结果</TableHead>
+                <TableHead className="text-right">详情</TableHead>
                 <TableHead className="text-right">操作</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {tasks.map((task) => {
-                const canPlay =
-                  task.status === "completed" &&
-                  Boolean(task.outputUrl) &&
-                  audioOutputModules.has(task.module)
-
-                return (
-                  <TableRow key={task.id}>
-                    <TableCell>
-                      <div className="flex flex-col gap-1">
-                        <span className="font-medium">{task.title}</span>
-                        <span className="text-xs text-muted-foreground">
-                          {task.id}
-                        </span>
-                      </div>
-                    </TableCell>
-                    <TableCell>{moduleLabels[task.module]}</TableCell>
-                    <TableCell>
-                      <StatusBadge status={task.status} />
-                    </TableCell>
-                    <TableCell className="min-w-32">
-                      <div className="flex items-center gap-2">
-                        <Progress value={task.progress} />
-                        <span className="w-10 text-xs text-muted-foreground">
-                          {task.progress}%
-                        </span>
-                      </div>
-                    </TableCell>
-                    <TableCell>{task.createdAt}</TableCell>
-                    <TableCell className="text-right">
-                      <Dialog>
-                        <DialogTrigger asChild>
-                          <Button variant="ghost" size="sm">
-                            {canPlay ? "播放" : "查看"}
-                          </Button>
-                        </DialogTrigger>
-                        <DialogContent>
-                          <DialogHeader>
-                            <DialogTitle>{task.title}</DialogTitle>
-                            <DialogDescription>
-                              {task.summary ?? "暂无结果摘要。"}
-                            </DialogDescription>
-                          </DialogHeader>
-                          <div className="flex flex-col gap-4">
-                            <Progress value={task.progress} />
-                            {canPlay && <AudioPlayback task={task} />}
-                            {task.outputUrl ? (
-                              <Button asChild>
-                                <a href={apiPath(task.outputUrl)} download>
-                                  <IconDownload data-icon="inline-start" />
-                                  {moduleOutputLabels[task.module] ??
-                                    "下载结果"}
-                                </a>
-                              </Button>
-                            ) : (
-                              <Button disabled variant="outline">
-                                <IconDownload data-icon="inline-start" />
-                                暂无结果
-                              </Button>
-                            )}
+              {tasks.map((task) => (
+                <TableRow key={task.id}>
+                  <TableCell>
+                    <div className="flex flex-col gap-1">
+                      <span className="font-medium">{task.title}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {task.id}
+                      </span>
+                    </div>
+                  </TableCell>
+                  <TableCell>{moduleLabels[task.module]}</TableCell>
+                  <TableCell>
+                    <StatusBadge status={task.status} />
+                  </TableCell>
+                  <TableCell className="min-w-32">
+                    <div className="flex items-center gap-2">
+                      <Progress value={task.progress} />
+                      <span className="w-10 text-xs text-muted-foreground">
+                        {task.progress}%
+                      </span>
+                    </div>
+                  </TableCell>
+                  <TableCell>{task.createdAt}</TableCell>
+                  <TableCell className="text-right">
+                    <TaskDetailDialog task={task} />
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Dialog>
+                      <DialogTrigger asChild>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          disabled={deletingId === task.id}
+                        >
+                          <IconTrash data-icon="inline-start" />
+                          删除
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent>
+                        <DialogHeader>
+                          <DialogTitle>删除任务</DialogTitle>
+                          <DialogDescription>
+                            删除后将同步移除任务记录和关联音频文件。
+                          </DialogDescription>
+                        </DialogHeader>
+                        <div className="rounded-lg border bg-muted/30 p-3 text-sm">
+                          <div className="font-medium" title={task.title}>
+                            {task.title}
                           </div>
-                        </DialogContent>
-                      </Dialog>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Dialog>
-                        <DialogTrigger asChild>
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            {task.id}
+                          </div>
+                        </div>
+                        <DialogFooter>
                           <Button
                             variant="destructive"
-                            size="sm"
+                            onClick={() => void deleteTask(task)}
                             disabled={deletingId === task.id}
                           >
-                            <IconTrash data-icon="inline-start" />
-                            删除
+                            {deletingId === task.id ? (
+                              <IconLoader2 data-icon="inline-start" />
+                            ) : (
+                              <IconTrash data-icon="inline-start" />
+                            )}
+                            确认删除
                           </Button>
-                        </DialogTrigger>
-                        <DialogContent>
-                          <DialogHeader>
-                            <DialogTitle>删除任务</DialogTitle>
-                            <DialogDescription>
-                              删除后将同步移除任务记录和关联音频文件。
-                            </DialogDescription>
-                          </DialogHeader>
-                          <div className="rounded-lg border bg-muted/30 p-3 text-sm">
-                            <div className="font-medium" title={task.title}>
-                              {task.title}
-                            </div>
-                            <div className="mt-1 text-xs text-muted-foreground">
-                              {task.id}
-                            </div>
-                          </div>
-                          <DialogFooter>
-                            <Button
-                              variant="destructive"
-                              onClick={() => void deleteTask(task)}
-                              disabled={deletingId === task.id}
-                            >
-                              {deletingId === task.id ? (
-                                <IconLoader2 data-icon="inline-start" />
-                              ) : (
-                                <IconTrash data-icon="inline-start" />
-                              )}
-                              确认删除
-                            </Button>
-                          </DialogFooter>
-                        </DialogContent>
-                      </Dialog>
-                    </TableCell>
-                  </TableRow>
-                )
-              })}
+                        </DialogFooter>
+                      </DialogContent>
+                    </Dialog>
+                  </TableCell>
+                </TableRow>
+              ))}
             </TableBody>
           </Table>
         </div>
@@ -910,91 +876,22 @@ function TaskTable({
   )
 }
 
-function AudioPlayback({ task }: { task: AudioTask }) {
-  const [source, setSource] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    let active = true
-    let objectUrl: string | null = null
-
-    async function loadAudio() {
-      if (!task.outputUrl) {
-        setLoading(false)
-        return
-      }
-
-      setLoading(true)
-      setError(null)
-
-      try {
-        const response = await fetch(apiPath(task.outputUrl), {
-          credentials: "include",
-          headers: {
-            Accept: "audio/*,application/octet-stream",
-          },
-        })
-
-        if (!response.ok) {
-          throw new Error(`音频加载失败：${response.status}`)
-        }
-
-        const blob = await response.blob()
-        objectUrl = URL.createObjectURL(blob)
-
-        if (active) {
-          setSource(objectUrl)
-        }
-      } catch (loadError) {
-        if (active) {
-          setError(
-            loadError instanceof Error ? loadError.message : "音频加载失败"
-          )
-        }
-      } finally {
-        if (active) {
-          setLoading(false)
-        }
-      }
-    }
-
-    loadAudio()
-
-    return () => {
-      active = false
-      if (objectUrl) {
-        URL.revokeObjectURL(objectUrl)
-      }
-    }
-  }, [task.outputUrl])
+function RetentionBadge({
+  retention,
+}: {
+  retention: AudioRetentionConfig | null
+}) {
+  const days = Number(retention?.retention_days ?? retention?.retentionDays ?? 0)
+  const label = retention
+    ? retention.enabled
+      ? `文件保存 ${days} 天`
+      : "文件长期保存"
+    : "文件保存策略加载中"
 
   return (
-    <div className="rounded-lg border bg-muted/30 p-4">
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <div className="text-sm font-medium">在线播放</div>
-        <Badge variant="secondary">{moduleLabels[task.module]}</Badge>
-      </div>
-      {loading && (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <IconLoader2 className="size-4 animate-spin" />
-          音频加载中
-        </div>
-      )}
-      {!loading && error && (
-        <div className="flex items-center gap-2 text-sm text-destructive">
-          <IconAlertCircle className="size-4" />
-          {error}
-        </div>
-      )}
-      {!loading && source && (
-        <audio
-          className="w-full"
-          controls
-          preload="metadata"
-          src={source}
-        />
-      )}
+    <div className="flex w-fit items-center gap-2 rounded-full border bg-muted/30 px-3 py-1.5 text-xs text-muted-foreground">
+      <IconClock className="size-3.5 text-primary" />
+      <span>{label}</span>
     </div>
   )
 }

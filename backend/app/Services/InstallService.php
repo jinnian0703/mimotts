@@ -8,6 +8,11 @@ use App\Models\User;
 class InstallService
 {
     public const EMAIL_AUTH_KEY = 'email_auth_config';
+    public const LINUXDO_AUTH_KEY = 'linuxdo_connect_config';
+    public const STATE_UNINSTALLED = 'uninstalled';
+    public const STATE_INSTALLED = 'installed';
+    public const STATE_INSTALLED_NEEDS_CONFIG = 'installed_needs_config';
+    public const STATE_CONFIG_ERROR = 'config_error';
 
     public function isInstalled(): bool
     {
@@ -19,22 +24,39 @@ class InstallService
     {
         $emailConfig = $this->emailAuthConfig();
         $linuxDoConfig = $this->linuxDoConfig();
-        $linuxDoConfigured = ! empty($linuxDoConfig['client_id'])
-            && ! empty($linuxDoConfig['client_secret']);
+        $linuxDoConfigured = (bool) ($linuxDoConfig['configured'] ?? false);
+        $linuxDoLoginEnabled = $linuxDoConfigured && (bool) ($linuxDoConfig['enabled'] ?? true);
+        $adminBound = User::where('is_admin', true)->exists();
+        $installed = $adminBound && SystemSetting::where('key', 'installation')->exists();
+        $mimoConfigured = (bool) $this->mimoConfig()['api_key'];
+        $missingConfig = $this->missingConfig($installed, $mimoConfigured, $linuxDoLoginEnabled, $emailConfig);
+        $installState = $this->installState($installed, $missingConfig);
 
         return [
-            'installed' => $this->isInstalled(),
-            'admin_bound' => User::where('is_admin', true)->exists(),
-            'administratorBound' => User::where('is_admin', true)->exists(),
-            'mimo_configured' => (bool) $this->mimoConfig()['api_key'],
+            'installed' => $installed,
+            'install_state' => $installState,
+            'installState' => $installState,
+            'state_message' => $this->stateMessage($installState),
+            'stateMessage' => $this->stateMessage($installState),
+            'missing_config' => $missingConfig,
+            'missingConfig' => $missingConfig,
+            'build' => app(BuildInfoService::class)->info(),
+            'admin_bound' => $adminBound,
+            'administratorBound' => $adminBound,
+            'mimo_configured' => $mimoConfigured,
             'linuxdo_configured' => $linuxDoConfigured,
             'linuxDoConfigured' => $linuxDoConfigured,
+            'linuxdo_login_enabled' => $linuxDoLoginEnabled,
+            'linuxDoLoginEnabled' => $linuxDoLoginEnabled,
+            'registration_enabled' => $emailConfig['registration_enabled'],
+            'registrationEnabled' => $emailConfig['registration_enabled'],
             'email_login_enabled' => $emailConfig['enabled'],
             'email_auth_enabled' => $emailConfig['enabled'],
             'emailLoginEnabled' => $emailConfig['enabled'],
             'emailAuthEnabled' => $emailConfig['enabled'],
             'email_auth' => [
                 'enabled' => $emailConfig['enabled'],
+                'registration_enabled' => $emailConfig['registration_enabled'],
                 'verification_required' => $emailConfig['verification_required'],
                 'smtp_configured' => $emailConfig['smtp_configured'],
                 'sender_configured' => $emailConfig['sender_configured'],
@@ -72,6 +94,9 @@ class InstallService
 
         return [
             'enabled' => (bool) ($value['enabled'] ?? false),
+            'registration_enabled' => array_key_exists('registration_enabled', $value)
+                ? (bool) $value['registration_enabled']
+                : true,
             'verification_required' => (bool) ($value['verification_required'] ?? false),
             'driver' => ($value['driver'] ?? 'smtp') === 'api' ? 'api' : 'smtp',
             'smtp' => [
@@ -94,6 +119,7 @@ class InstallService
             'smtp_configured' => ! empty($smtp['host']) && ! empty($smtp['port']),
             'api_configured' => ! empty($api['endpoint']) && ! empty($api['token']),
             'sender_configured' => ! empty($sender['address']),
+            'linuxdo' => $this->linuxDoConfig(),
         ];
     }
 
@@ -106,6 +132,9 @@ class InstallService
     {
         SystemSetting::putEncrypted(self::EMAIL_AUTH_KEY, [
             'enabled' => (bool) ($config['enabled'] ?? false),
+            'registration_enabled' => array_key_exists('registration_enabled', $config)
+                ? (bool) $config['registration_enabled']
+                : true,
             'verification_required' => (bool) ($config['verification_required'] ?? false),
             'driver' => ($config['driver'] ?? 'smtp') === 'api' ? 'api' : 'smtp',
             'smtp' => [
@@ -128,6 +157,40 @@ class InstallService
         ]);
     }
 
+    public function linuxDoConfig(): array
+    {
+        $value = $this->storedLinuxDoConfig();
+
+        return [
+            'enabled' => array_key_exists('enabled', $value) ? (bool) $value['enabled'] : true,
+            'client_id' => $value['client_id'] ?? config('services.linuxdo.client_id'),
+            'client_secret_configured' => ! empty($value['client_secret'] ?? config('services.linuxdo.client_secret')),
+            'redirect_uri' => $value['redirect_uri'] ?? config('services.linuxdo.redirect_uri'),
+            'configured' => ! empty($value['client_id'] ?? config('services.linuxdo.client_id'))
+                && ! empty($value['client_secret'] ?? config('services.linuxdo.client_secret'))
+                && ! empty($value['redirect_uri'] ?? config('services.linuxdo.redirect_uri')),
+        ];
+    }
+
+    public function linuxDoConfigForUpdate(): array
+    {
+        return $this->storedLinuxDoConfig() + [
+            'client_id' => config('services.linuxdo.client_id'),
+            'client_secret' => config('services.linuxdo.client_secret'),
+            'redirect_uri' => config('services.linuxdo.redirect_uri'),
+        ];
+    }
+
+    public function setLinuxDoConfig(array $config): void
+    {
+        SystemSetting::putEncrypted(self::LINUXDO_AUTH_KEY, [
+            'enabled' => array_key_exists('enabled', $config) ? (bool) $config['enabled'] : true,
+            'client_id' => $config['client_id'] ?? null,
+            'client_secret' => $config['client_secret'] ?? null,
+            'redirect_uri' => $config['redirect_uri'] ?? null,
+        ]);
+    }
+
     private function storedEmailAuthConfig(): array
     {
         $setting = SystemSetting::where('key', self::EMAIL_AUTH_KEY)->first();
@@ -140,17 +203,53 @@ class InstallService
         return app(MimoConfigService::class)->systemConfig();
     }
 
-    private function linuxDoConfig(): array
+    private function storedLinuxDoConfig(): array
     {
-        $setting = SystemSetting::where('key', 'linuxdo_connect_config')->first();
+        $setting = SystemSetting::where('key', self::LINUXDO_AUTH_KEY)->first();
 
         if ($setting) {
             return $setting->decodedValue() ?: [];
         }
 
+        return [];
+    }
+
+    private function missingConfig(bool $installed, bool $mimoConfigured, bool $linuxDoConfigured, array $emailConfig): array
+    {
+        if (! $installed) {
+            return [];
+        }
+
+        $missing = [];
+        if (! $mimoConfigured) {
+            $missing[] = 'mimo_api';
+        }
+        if (! ($emailConfig['enabled'] ?? false) && ! $linuxDoConfigured) {
+            $missing[] = 'auth_method';
+        }
+        if (($emailConfig['enabled'] ?? false) && ! ($emailConfig['sender_configured'] ?? false)) {
+            $missing[] = 'email_sender';
+        }
+
+        return $missing;
+    }
+
+    private function installState(bool $installed, array $missingConfig): string
+    {
+        if (! $installed) {
+            return self::STATE_UNINSTALLED;
+        }
+
+        return $missingConfig ? self::STATE_INSTALLED_NEEDS_CONFIG : self::STATE_INSTALLED;
+    }
+
+    private function stateMessage(string $state): string
+    {
         return [
-            'client_id' => config('services.linuxdo.client_id'),
-            'client_secret' => config('services.linuxdo.client_secret'),
-        ];
+            self::STATE_UNINSTALLED => '系统未安装',
+            self::STATE_INSTALLED => '系统已安装',
+            self::STATE_INSTALLED_NEEDS_CONFIG => '系统已安装，但仍有关键配置缺失',
+            self::STATE_CONFIG_ERROR => '系统配置读取异常',
+        ][$state] ?? $state;
     }
 }

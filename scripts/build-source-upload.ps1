@@ -109,6 +109,21 @@ function New-PortableZip {
     }
 }
 
+function Get-GitValue {
+    param([string[]] $Arguments)
+
+    try {
+        $value = & git -C $rootPath @Arguments 2>$null
+        if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($value)) {
+            return ($value | Select-Object -First 1).Trim()
+        }
+    } catch {
+        return $null
+    }
+
+    return $null
+}
+
 New-Item -ItemType Directory -Force -Path $distPath | Out-Null
 New-Item -ItemType Directory -Force -Path (Join-Path $backendPath "bootstrap/cache") | Out-Null
 New-Item -ItemType Directory -Force -Path (Join-Path $backendPath "storage/framework/cache") | Out-Null
@@ -151,6 +166,23 @@ Copy-Item -LiteralPath (Join-Path $rootPath "deploy/source/README-UPLOAD.txt") -
 
 Copy-Directory -Source $backendPath -Destination (Join-Path $buildPackagePath "backend") -Exclude @(".env", "tests", ".phpunit.result.cache")
 
+$buildInfo = [ordered]@{
+    version = (Get-GitValue -Arguments @("describe", "--tags", "--always", "--dirty"))
+    commit = (Get-GitValue -Arguments @("rev-parse", "--short", "HEAD"))
+    built_at = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+}
+
+if ([string]::IsNullOrWhiteSpace($buildInfo.version)) {
+    $buildInfo.version = "dev"
+}
+
+$buildInfoJson = $buildInfo | ConvertTo-Json
+[System.IO.File]::WriteAllText(
+    (Join-Path $buildPackagePath "backend/build.json"),
+    $buildInfoJson,
+    [System.Text.UTF8Encoding]::new($false)
+)
+
 $runtimeDirs = @(
     "backend/storage/app/audio/uploads",
     "backend/storage/app/audio/generated",
@@ -189,6 +221,7 @@ Assert-Path -Path (Join-Path $buildPackagePath "_next") -Message "Missing fronte
 Assert-Path -Path (Join-Path $buildPackagePath "api.php") -Message "Missing api.php."
 Assert-Path -Path (Join-Path $buildPackagePath "backend/bootstrap/app.php") -Message "Missing backend bootstrap."
 Assert-Path -Path (Join-Path $buildPackagePath "backend/vendor/autoload.php") -Message "Missing backend vendor autoload."
+Assert-Path -Path (Join-Path $buildPackagePath "backend/build.json") -Message "Missing backend build metadata."
 Assert-Path -Path (Join-Path $buildPackagePath "README.txt") -Message "Missing upload README."
 Assert-Path -Path (Join-Path $buildPackagePath "README.md") -Message "Missing upload README.md."
 

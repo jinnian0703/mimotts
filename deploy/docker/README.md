@@ -136,13 +136,28 @@ docker compose --env-file .env -f docker-compose.yml up -d
 
 ## 更新
 
-Docker 方案独立使用时，替换源码后执行：
+Docker 方案推荐使用发布镜像。后台「系统设置 / 系统更新」可以检测 GitHub Release 最新版本，并生成 Docker 升级命令。手动升级：
 
 ```bash
-docker compose --env-file .env -f docker-compose.yml up -d --build
+cd deploy/docker
+MIMO_IMAGE=ghcr.io/jinnian0703/mimotts:v1.0.0 docker compose --env-file .env -f docker-compose.yml pull app
+MIMO_IMAGE=ghcr.io/jinnian0703/mimotts:v1.0.0 docker compose --env-file .env -f docker-compose.yml up -d
+```
+
+也可以使用脚本：
+
+```bash
+sh deploy/docker/upgrade.sh ghcr.io/jinnian0703/mimotts:v1.0.0
 ```
 
 应用容器启动时会根据 `RUN_MIGRATIONS=true` 自动执行数据库迁移。
+
+默认不建议让 Web 后台直接执行宿主机 Docker 命令。若确实需要，请自行保证 PHP 进程有 Docker 权限，并设置：
+
+```env
+MIMO_UPDATE_ALLOW_UPGRADE=true
+MIMO_DOCKER_COMPOSE_DIR=/path/to/deploy/docker
+```
 
 当前宝塔站点更新请使用仓库根目录的源码上传流程：
 

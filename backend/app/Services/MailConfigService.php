@@ -60,7 +60,7 @@ class MailConfigService
         Config::set('mail.mailers.smtp.password', $smtp['password'] ?? env('MAIL_PASSWORD'));
         Config::set('mail.mailers.smtp.encryption', $this->normalizeEncryption($encryption));
         Config::set('mail.from.address', $sender['address'] ?? env('MAIL_FROM_ADDRESS', 'noreply@example.com'));
-        Config::set('mail.from.name', $sender['name'] ?? env('MAIL_FROM_NAME', 'Mimo'));
+        Config::set('mail.from.name', $sender['name'] ?? env('MAIL_FROM_NAME', 'MimoTTS'));
     }
 
     private function sendViaApi(array $emailConfig, string $to, string $subject, string $body, ?string $name = null): void

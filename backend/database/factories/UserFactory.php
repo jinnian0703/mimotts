@@ -14,8 +14,8 @@ class UserFactory extends Factory
     {
         return [
             'linuxdo_id' => (string) Str::uuid(),
-            'name' => fake()->name(),
-            'email' => fake()->safeEmail(),
+            'name' => $this->faker->name(),
+            'email' => $this->faker->safeEmail(),
             'avatar_url' => null,
             'is_admin' => false,
             'last_login_at' => now(),

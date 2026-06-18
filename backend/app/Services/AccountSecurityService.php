@@ -22,7 +22,7 @@ class AccountSecurityService
         $templateService = app(EmailTemplateService::class);
         $template = $templateService->template($emailConfig, EmailTemplateService::TWO_FACTOR);
         $variables = [
-            'app_name' => config('app.name', 'Mimo'),
+            'app_name' => config('app.name', 'MimoTTS'),
             'user_name' => $user->name,
             'email' => $user->email,
             'code' => $code,

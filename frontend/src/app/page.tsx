@@ -50,7 +50,7 @@ export default function HomePage() {
           <span className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
             <IconClipboardList className="size-5" />
           </span>
-          <span className="font-heading text-xl font-semibold">Mimo</span>
+          <span className="font-heading text-xl font-semibold">MimoTTS</span>
         </Link>
         <Button asChild variant="outline">
           <Link href={entryHref}>
@@ -100,7 +100,7 @@ export default function HomePage() {
           <div className="flex items-center justify-between border-b border-border pb-4">
             <div>
               <div className="text-sm text-muted-foreground">系统入口</div>
-              <div className="mt-1 text-2xl font-semibold">Mimo</div>
+              <div className="mt-1 text-2xl font-semibold">MimoTTS</div>
             </div>
             <div className="flex size-10 items-center justify-center rounded-lg bg-secondary text-primary">
               <IconGauge className="size-5" />

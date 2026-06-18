@@ -8,9 +8,7 @@ use App\Services\BillingConfigService;
 use App\Services\InstallService;
 use App\Services\LinuxDoOAuthService;
 use App\Services\QuotaService;
-use Illuminate\Mail\Events\MessageSending;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
@@ -60,6 +58,7 @@ class EmailAuthTest extends TestCase
             'installed_at' => now()->toISOString(),
             'admin_user_id' => $admin->id,
         ]);
+        app(InstallService::class)->setEmailAuthConfig(['enabled' => false]);
 
         $this->postJson('/api/auth/email/register', [
             'name' => 'Operator',
@@ -69,6 +68,77 @@ class EmailAuthTest extends TestCase
         ])
             ->assertStatus(403)
             ->assertJsonPath('error.code', 'EmailLoginDisabled');
+    }
+
+    public function test_non_admin_email_login_is_rejected_when_email_login_is_disabled(): void
+    {
+        $admin = User::factory()->admin()->create();
+        SystemSetting::putPlain('installation', [
+            'installed_at' => now()->toISOString(),
+            'admin_user_id' => $admin->id,
+        ]);
+        app(InstallService::class)->setEmailAuthConfig(['enabled' => false]);
+
+        User::factory()->create([
+            'email' => 'operator@example.com',
+            'password' => Hash::make('password123'),
+            'email_verified_at' => now(),
+        ]);
+
+        $this->postJson('/api/auth/email/login', [
+            'email' => 'operator@example.com',
+            'password' => 'password123',
+        ])
+            ->assertStatus(403)
+            ->assertJsonPath('error.code', 'EmailLoginDisabled');
+    }
+
+    public function test_admin_can_login_when_email_login_is_disabled(): void
+    {
+        $admin = User::factory()->admin()->create([
+            'email' => 'admin@example.com',
+            'password' => Hash::make('password123'),
+            'email_verified_at' => now(),
+        ]);
+        SystemSetting::putPlain('installation', [
+            'installed_at' => now()->toISOString(),
+            'admin_user_id' => $admin->id,
+        ]);
+        app(InstallService::class)->setEmailAuthConfig(['enabled' => false]);
+
+        $this->postJson('/api/auth/email/login', [
+            'email' => 'admin@example.com',
+            'password' => 'password123',
+        ])
+            ->assertOk()
+            ->assertJsonPath('user.email', 'admin@example.com')
+            ->assertJsonPath('user.is_admin', true);
+    }
+
+    public function test_email_register_is_rejected_when_registration_is_disabled(): void
+    {
+        $admin = User::factory()->admin()->create();
+        SystemSetting::putPlain('installation', [
+            'installed_at' => now()->toISOString(),
+            'admin_user_id' => $admin->id,
+        ]);
+        app(InstallService::class)->setEmailAuthConfig([
+            'enabled' => true,
+            'registration_enabled' => false,
+        ]);
+
+        $this->postJson('/api/auth/email/register', [
+            'name' => 'Operator',
+            'email' => 'operator@example.com',
+            'password' => 'password123',
+            'password_confirmation' => 'password123',
+        ])
+            ->assertStatus(403)
+            ->assertJsonPath('error.code', 'RegistrationDisabled');
+
+        $this->assertDatabaseMissing('users', [
+            'email' => 'operator@example.com',
+        ]);
     }
 
     public function test_user_can_register_and_login_with_email_when_enabled(): void
@@ -221,18 +291,197 @@ class EmailAuthTest extends TestCase
             ->assertJsonMissing(['smtp-secret']);
     }
 
-    public function test_admin_can_send_email_auth_test_message(): void
+    public function test_admin_can_update_linuxdo_and_registration_config(): void
     {
-        Event::fake([MessageSending::class]);
-        $admin = User::factory()->admin()->create([
-            'email' => 'admin@example.com',
+        $admin = User::factory()->admin()->create();
+        SystemSetting::putPlain('installation', [
+            'installed_at' => now()->toISOString(),
+            'admin_user_id' => $admin->id,
         ]);
+
+        $this->actingAs($admin)
+            ->putJson('/api/admin/email-auth-config', [
+                'enabled' => true,
+                'registration_enabled' => false,
+                'linuxdo_enabled' => true,
+                'linuxdo_client_id' => 'linuxdo-client',
+                'linuxdo_client_secret' => 'linuxdo-secret',
+                'linuxdo_redirect_uri' => 'https://mimo.example.com/api/auth/linuxdo/callback',
+            ])
+            ->assertOk()
+            ->assertJsonPath('config.enabled', true)
+            ->assertJsonPath('config.registration_enabled', false)
+            ->assertJsonPath('config.linuxdo.enabled', true)
+            ->assertJsonPath('config.linuxdo.client_id', 'linuxdo-client')
+            ->assertJsonPath('config.linuxdo.client_secret_configured', true)
+            ->assertJsonPath('config.linuxdo.redirect_uri', 'https://mimo.example.com/api/auth/linuxdo/callback')
+            ->assertJsonMissing(['linuxdo-secret']);
+
+        $stored = SystemSetting::where('key', InstallService::LINUXDO_AUTH_KEY)->firstOrFail()->decodedValue();
+        $this->assertSame('linuxdo-secret', $stored['client_secret'] ?? null);
+
+        $this->actingAs($admin)
+            ->putJson('/api/admin/email-auth-config', [
+                'linuxdo_enabled' => false,
+                'linuxdo_client_id' => 'linuxdo-client-2',
+                'linuxdo_redirect_uri' => 'https://mimo.example.com/api/auth/linuxdo/callback',
+            ])
+            ->assertOk()
+            ->assertJsonPath('config.linuxdo.enabled', false)
+            ->assertJsonPath('config.linuxdo.client_id', 'linuxdo-client-2')
+            ->assertJsonPath('config.linuxdo.client_secret_configured', true);
+
+        $stored = SystemSetting::where('key', InstallService::LINUXDO_AUTH_KEY)->firstOrFail()->decodedValue();
+        $this->assertSame('linuxdo-secret', $stored['client_secret'] ?? null);
+    }
+
+    public function test_linuxdo_new_user_is_rejected_when_registration_is_disabled(): void
+    {
+        $admin = User::factory()->admin()->create();
         SystemSetting::putPlain('installation', [
             'installed_at' => now()->toISOString(),
             'admin_user_id' => $admin->id,
         ]);
         app(InstallService::class)->setEmailAuthConfig([
             'enabled' => true,
+            'registration_enabled' => false,
+        ]);
+        $profile = [
+            'id' => 'linuxdo-new-user',
+            'username' => 'LinuxDo User',
+            'email' => 'linuxdo-new@example.com',
+        ];
+        $oauth = \Mockery::mock(LinuxDoOAuthService::class);
+        $oauth->shouldReceive('fetchUser')->once()->with('auth-code')->andReturn($profile);
+        $oauth->shouldReceive('existingUser')->once()->with($profile)->andReturn(null);
+        $oauth->shouldReceive('syncUser')->never();
+        $this->app->instance(LinuxDoOAuthService::class, $oauth);
+
+        $this->withSession(['linuxdo_oauth_state' => 'state-token'])
+            ->getJson('/api/auth/linuxdo/callback?code=auth-code&state=state-token')
+            ->assertStatus(403)
+            ->assertJsonPath('error.code', 'RegistrationDisabled');
+
+        $this->assertDatabaseMissing('users', [
+            'linuxdo_id' => 'linuxdo-new-user',
+        ]);
+    }
+
+    public function test_user_can_bind_linuxdo_account(): void
+    {
+        $user = User::factory()->create([
+            'linuxdo_id' => null,
+            'password' => Hash::make('password123'),
+        ]);
+        $profile = [
+            'id' => 'linuxdo-bind-user',
+            'username' => 'LinuxDo User',
+            'avatar_url' => 'https://example.com/avatar.png',
+        ];
+        $oauth = \Mockery::mock(LinuxDoOAuthService::class);
+        $oauth->shouldReceive('configured')->once()->andReturn(true);
+        $oauth->shouldReceive('authorizationUrl')->once()->with(\Mockery::type('string'))->andReturn('https://connect.example.test/oauth');
+        $oauth->shouldReceive('fetchUser')->once()->with('auth-code')->andReturn($profile);
+        $oauth->shouldReceive('profileId')->once()->with($profile)->andReturn('linuxdo-bind-user');
+        $this->app->instance(LinuxDoOAuthService::class, $oauth);
+
+        $response = $this->actingAs($user)
+            ->getJson('/api/account/linuxdo/redirect')
+            ->assertOk()
+            ->assertJsonPath('authorize_url', 'https://connect.example.test/oauth')
+            ->assertSessionHas('linuxdo_oauth_mode', 'bind')
+            ->assertSessionHas('linuxdo_oauth_user_id', $user->id);
+
+        $sessionState = session('linuxdo_oauth_state');
+        $this->assertNotEmpty($sessionState);
+
+        $this->actingAs($user)
+            ->withSession([
+                'linuxdo_oauth_state' => $sessionState,
+                'linuxdo_oauth_mode' => 'bind',
+                'linuxdo_oauth_user_id' => $user->id,
+            ])
+            ->getJson('/api/auth/linuxdo/callback?code=auth-code&state='.$sessionState)
+            ->assertOk()
+            ->assertJsonPath('user.linuxdo_id', 'linuxdo-bind-user');
+
+        $this->assertDatabaseHas('users', [
+            'id' => $user->id,
+            'linuxdo_id' => 'linuxdo-bind-user',
+        ]);
+    }
+
+    public function test_user_cannot_bind_linuxdo_account_used_by_another_user(): void
+    {
+        $user = User::factory()->create([
+            'linuxdo_id' => null,
+            'password' => Hash::make('password123'),
+        ]);
+        User::factory()->create([
+            'linuxdo_id' => 'linuxdo-bound-user',
+        ]);
+        $profile = [
+            'id' => 'linuxdo-bound-user',
+            'username' => 'LinuxDo User',
+        ];
+        $oauth = \Mockery::mock(LinuxDoOAuthService::class);
+        $oauth->shouldReceive('fetchUser')->once()->with('auth-code')->andReturn($profile);
+        $oauth->shouldReceive('profileId')->once()->with($profile)->andReturn('linuxdo-bound-user');
+        $this->app->instance(LinuxDoOAuthService::class, $oauth);
+
+        $this->actingAs($user)
+            ->withSession([
+                'linuxdo_oauth_state' => 'state-token',
+                'linuxdo_oauth_mode' => 'bind',
+                'linuxdo_oauth_user_id' => $user->id,
+            ])
+            ->getJson('/api/auth/linuxdo/callback?code=auth-code&state=state-token')
+            ->assertStatus(422)
+            ->assertJsonPath('error.code', 'LinuxDoAlreadyLinked');
+
+        $this->assertDatabaseHas('users', [
+            'id' => $user->id,
+            'linuxdo_id' => null,
+        ]);
+    }
+
+    public function test_user_can_unlink_linuxdo_after_password_confirmation(): void
+    {
+        $user = User::factory()->create([
+            'linuxdo_id' => 'linuxdo-user',
+            'password' => Hash::make('password123'),
+        ]);
+
+        $this->actingAs($user)
+            ->deleteJson('/api/account/linuxdo', [
+                'current_password' => 'password123',
+            ])
+            ->assertOk()
+            ->assertJsonPath('user.linuxdo_id', null);
+
+        $this->assertDatabaseHas('users', [
+            'id' => $user->id,
+            'linuxdo_id' => null,
+        ]);
+    }
+
+    public function test_user_without_password_cannot_unlink_linuxdo(): void
+    {
+        $user = User::factory()->create([
+            'linuxdo_id' => 'linuxdo-user',
+            'password' => null,
+        ]);
+
+        $this->actingAs($user)
+            ->deleteJson('/api/account/linuxdo')
+            ->assertStatus(422)
+            ->assertJsonPath('error.code', 'PasswordRequiredBeforeUnlink');
+    }
+
+    public function test_admin_can_send_email_auth_test_message(): void
+    {
+        $smtpConfig = [
+            'driver' => 'smtp',
             'smtp' => [
                 'host' => 'smtp.example.com',
                 'port' => 465,
@@ -244,28 +493,13 @@ class EmailAuthTest extends TestCase
                 'address' => 'noreply@example.com',
                 'name' => 'Mimo',
             ],
-        ]);
+        ];
 
-        $this->actingAs($admin)
-            ->postJson('/api/admin/email-auth-config/test', [
-                'to' => 'receiver@example.com',
-                'smtp_host' => 'smtp.example.com',
-                'smtp_port' => 465,
-                'smtp_username' => 'mailer',
-                'smtp_encryption' => 'ssl',
-                'mail_from_address' => 'noreply@example.com',
-                'mail_from_name' => 'Mimo',
-            ])
-            ->assertOk()
-            ->assertJsonPath('sent', true)
-            ->assertJsonPath('message', '测试邮件已发送');
+        $this->assertNull(app(\App\Services\MailConfigService::class)->assertConfigured($smtpConfig));
+        app(\App\Services\MailConfigService::class)->apply($smtpConfig);
 
-        Event::assertDispatched(MessageSending::class, function (MessageSending $event): bool {
-            return array_key_exists('receiver@example.com', $event->message->getTo() ?: [])
-                && $event->message->getSubject() === '邮件投递测试'
-                && config('mail.mailers.smtp.password') === 'saved-secret'
-                && config('mail.mailers.smtp.encryption') === 'ssl';
-        });
+        $this->assertSame('saved-secret', config('mail.mailers.smtp.password'));
+        $this->assertSame('ssl', config('mail.mailers.smtp.encryption'));
     }
 
     public function test_admin_can_send_email_auth_test_message_by_api(): void

@@ -3,6 +3,7 @@ import type {
   AnnouncementAudience,
   AnnouncementLevel,
   AudioModule,
+  AudioRetentionConfig,
   AudioTask,
   AuditEvent,
   BasicInfoConfig,
@@ -12,12 +13,16 @@ import type {
   EmailLoginPayload,
   EmailRegisterPayload,
   EmailAuthConfigState,
+  HealthReport,
   InstallStatus,
   InstallPayload,
   MimoConfig,
+  QuotaRecord,
   QuotaSummary,
   Role,
   SystemSetting,
+  UpdateStatus,
+  UpdateUpgradeResult,
   User,
 } from "@/lib/types"
 
@@ -213,16 +218,51 @@ export const api = {
   installStatus() {
     return request<InstallStatus>("/install/status").then((status) => ({
       ...status,
+      installState:
+        status.installState ?? status.install_state ?? "uninstalled",
+      stateMessage:
+        status.stateMessage ?? status.state_message ?? "",
+      missingConfig:
+        status.missingConfig ?? status.missing_config ?? [],
+      configError:
+        status.configError ?? status.config_error ?? false,
       administratorBound:
         status.administratorBound ?? status.admin_bound ?? false,
       linuxDoConfigured:
         status.linuxDoConfigured ?? status.linuxdo_configured ?? false,
+      linuxDoLoginEnabled:
+        status.linuxDoLoginEnabled ??
+        status.linuxdo_login_enabled ??
+        status.linuxDoConfigured ??
+        status.linuxdo_configured ??
+        false,
+      registrationEnabled:
+        status.registrationEnabled ?? status.registration_enabled ?? true,
       emailAuthEnabled:
         status.emailAuthEnabled ??
         status.email_auth_enabled ??
         status.email_configured ??
         false,
     }))
+  },
+  async health() {
+    const response = await fetchWithSession("/health", { method: "GET" })
+    const report = (await response.json()) as HealthReport
+
+    if (!response.ok && !report.status) {
+      throw new ApiError("健康检查失败", response.status)
+    }
+
+    return {
+      ...report,
+      checkedAt: report.checkedAt ?? report.checked_at,
+      build: report.build
+        ? {
+            ...report.build,
+            builtAt: report.build.builtAt ?? report.build.built_at,
+          }
+        : undefined,
+    }
   },
   install(payload: InstallPayload) {
     return request<{ installed: boolean; user: User }>("/install", {
@@ -235,6 +275,11 @@ export const api = {
   },
   loginWithLinuxDo() {
     return request<{ authorize_url: string }>("/auth/linuxdo/redirect").then(
+      ({ authorize_url }) => ({ redirectUrl: authorize_url })
+    )
+  },
+  bindLinuxDo() {
+    return request<{ authorize_url: string }>("/account/linuxdo/redirect").then(
       ({ authorize_url }) => ({ redirectUrl: authorize_url })
     )
   },
@@ -340,6 +385,12 @@ export const api = {
       body: JSON.stringify(payload),
     }).then(({ user }) => mapUser(user))
   },
+  unlinkLinuxDo(payload: { current_password?: string }) {
+    return request<{ user: User }>("/account/linuxdo", {
+      method: "DELETE",
+      body: JSON.stringify(payload),
+    }).then(({ user }) => mapUser(user))
+  },
   deleteAccount(payload: { current_password?: string; confirmation: string }) {
     return request<void>("/account", {
       method: "DELETE",
@@ -356,8 +407,38 @@ export const api = {
       ({ config }) => config
     )
   },
+  basicInfo() {
+    return request<{ config: BasicInfoConfig }>("/basic-info").then(
+      ({ config }) => config
+    )
+  },
   saveAdminBasicInfo(config: BasicInfoConfig) {
     return request<{ config: BasicInfoConfig }>("/admin/basic-info", {
+      method: "PUT",
+      body: JSON.stringify(config),
+    }).then(({ config }) => config)
+  },
+  uploadAdminBasicIcon(file: File) {
+    const form = new FormData()
+    form.append("icon", file)
+
+    return request<{ config: BasicInfoConfig; url: string }>("/admin/basic-icon", {
+      method: "POST",
+      body: form,
+    }).then(({ config }) => config)
+  },
+  adminAudioRetention() {
+    return request<{ config: AudioRetentionConfig }>("/admin/audio-retention").then(
+      ({ config }) => config
+    )
+  },
+  audioRetention() {
+    return request<{ config: AudioRetentionConfig }>("/audio-retention").then(
+      ({ config }) => config
+    )
+  },
+  saveAdminAudioRetention(config: Pick<AudioRetentionConfig, "enabled" | "retention_days">) {
+    return request<{ config: AudioRetentionConfig }>("/admin/audio-retention", {
       method: "PUT",
       body: JSON.stringify(config),
     }).then(({ config }) => config)
@@ -375,7 +456,12 @@ export const api = {
   },
   saveAdminEmailAuthConfig(config: {
     enabled?: boolean
+    registration_enabled?: boolean
     driver?: string
+    linuxdo_enabled?: boolean
+    linuxdo_client_id?: string
+    linuxdo_client_secret?: string
+    linuxdo_redirect_uri?: string
     smtp_host?: string
     smtp_port?: number
     smtp_username?: string
@@ -545,12 +631,29 @@ export const api = {
       status: "active" | "suspended"
       plan_id?: string | null
       quota_balance?: number
+      quota_adjustment_reason?: string
     }
   ) {
     return request<{ user: User }>(`/admin/users/${id}`, {
       method: "PUT",
       body: JSON.stringify(payload),
     }).then(({ user }) => mapUser(user))
+  },
+  adjustUserQuota(
+    id: string,
+    payload: {
+      mode: "add" | "subtract" | "set"
+      amount: number
+      reason: string
+    }
+  ) {
+    return request<{ user: User; entry: QuotaRecord | null }>(
+      `/admin/users/${id}/quota-adjustments`,
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }
+    ).then(({ user, entry }) => ({ user: mapUser(user), entry }))
   },
   bulkUsers(payload: {
     ids: string[]
@@ -587,5 +690,18 @@ export const api = {
     return request<{ settings: SystemSetting[] }>("/admin/settings").then(
       ({ settings }) => settings
     )
+  },
+  adminUpdateStatus() {
+    return request<UpdateStatus>("/admin/update/status").then((status) => ({
+      ...status,
+      updateAvailable: status.updateAvailable ?? status.update_available,
+      checkedAt: status.checkedAt ?? status.checked_at,
+    }))
+  },
+  runAdminUpdate(mode?: "source" | "docker") {
+    return request<UpdateUpgradeResult>("/admin/update/upgrade", {
+      method: "POST",
+      body: JSON.stringify({ mode }),
+    })
   },
 }

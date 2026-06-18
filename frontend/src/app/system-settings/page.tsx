@@ -1,9 +1,11 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import Image from "next/image"
 import { useRouter } from "next/navigation"
 import {
   IconApi,
+  IconBrandOauth,
   IconBolt,
   IconCreditCardPay,
   IconDeviceFloppy,
@@ -24,9 +26,14 @@ import {
   IconShieldCheck,
   IconSparkles,
   IconMicrophone,
+  IconClock,
   IconTrash,
+  IconUpload,
+  IconCloudDownload,
+  IconTerminal2,
   IconWaveSine,
   IconWorldWww,
+  IconUserPlus,
 } from "@tabler/icons-react"
 import { toast } from "sonner"
 
@@ -36,12 +43,15 @@ import { PageHeading } from "@/components/page-heading"
 import { api } from "@/lib/api"
 import type {
   BasicInfoConfig,
+  AudioRetentionConfig,
   BillingConfig,
   BillingPlan,
   EmailApiProvider,
   EmailAuthConfigState,
+  HealthReport,
   MimoConfig,
   SystemSetting,
+  UpdateStatus,
   UsageCostKey,
 } from "@/lib/types"
 import { cn } from "@/lib/utils"
@@ -100,6 +110,8 @@ type SettingsTab =
   | "access"
   | "mail"
   | "billing"
+  | "retention"
+  | "updates"
   | "records"
 type EmailTemplateKey = "verification" | "two_factor"
 
@@ -113,11 +125,19 @@ const defaultBasicInfo: BasicInfoConfig = {
   system_name: "",
   site_title: "",
   site_subtitle: "",
+  icon_url: "",
   app_url: "",
   frontend_url: "",
   icp_record: "",
   footer_text: "",
   support_email: "",
+}
+
+const defaultAudioRetention: AudioRetentionConfig = {
+  enabled: false,
+  retention_days: 30,
+  last_pruned_at: null,
+  last_pruned_count: 0,
 }
 
 const defaultEmailTemplates = {
@@ -133,7 +153,15 @@ const defaultEmailTemplates = {
 
 const defaultEmail: EmailAuthConfigState = {
   enabled: true,
+  registration_enabled: true,
   verification_required: false,
+  linuxdo: {
+    enabled: true,
+    client_id: "",
+    client_secret_configured: false,
+    redirect_uri: "",
+    configured: false,
+  },
   driver: "smtp",
   smtp: {},
   api: {
@@ -277,6 +305,7 @@ function mergeBasicInfo(config?: BasicInfoConfig): BasicInfoConfig {
   return {
     ...defaultBasicInfo,
     ...config,
+    icon_url: config?.icon_url ?? config?.iconUrl ?? "",
   }
 }
 
@@ -300,6 +329,24 @@ function mergeBillingConfig(config?: BillingConfig): BillingConfig {
   }
 }
 
+function mergeAudioRetentionConfig(
+  config?: AudioRetentionConfig
+): AudioRetentionConfig {
+  return {
+    ...defaultAudioRetention,
+    ...config,
+    retention_days:
+      Number(config?.retention_days ?? config?.retentionDays) ||
+      defaultAudioRetention.retention_days,
+    last_pruned_at:
+      config?.last_pruned_at ??
+      config?.lastPrunedAt ??
+      defaultAudioRetention.last_pruned_at,
+    last_pruned_count:
+      Number(config?.last_pruned_count ?? config?.lastPrunedCount) || 0,
+  }
+}
+
 function mergeEmailConfig(config?: EmailAuthConfigState): EmailAuthConfigState {
   return {
     ...defaultEmail,
@@ -315,6 +362,10 @@ function mergeEmailConfig(config?: EmailAuthConfigState): EmailAuthConfigState {
     sender: {
       ...defaultEmail.sender,
       ...(config?.sender ?? {}),
+    },
+    linuxdo: {
+      ...defaultEmail.linuxdo,
+      ...(config?.linuxdo ?? {}),
     },
     templates: {
       verification: {
@@ -337,11 +388,17 @@ export default function SystemSettingsPage() {
   const [email, setEmail] = useState<EmailAuthConfigState>(defaultEmail)
   const [smtpPassword, setSmtpPassword] = useState("")
   const [mailApiToken, setMailApiToken] = useState("")
+  const [linuxDoSecret, setLinuxDoSecret] = useState("")
   const [testEmailTo, setTestEmailTo] = useState("")
   const [billing, setBilling] = useState<BillingConfig>(defaultBilling)
+  const [audioRetention, setAudioRetention] =
+    useState<AudioRetentionConfig>(defaultAudioRetention)
   const [plans, setPlans] = useState<PlanDraft[]>([])
   const [settings, setSettings] = useState<SystemSetting[]>([])
+  const [health, setHealth] = useState<HealthReport | null>(null)
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null)
   const [saving, setSaving] = useState<string | null>(null)
+  const iconInputRef = useRef<HTMLInputElement | null>(null)
   const isAdmin = user?.role === "admin"
 
   const refresh = useCallback(async () => {
@@ -351,24 +408,34 @@ export default function SystemSettingsPage() {
         mimoConfig,
         emailConfig,
         billingConfig,
+        audioRetentionConfig,
         systemSettings,
+        healthReport,
+        updateReport,
       ] =
         await Promise.all([
           api.adminBasicInfo(),
           api.adminMimoConfig(),
           api.adminEmailAuthConfig(),
           api.adminBillingConfig(),
+          api.adminAudioRetention(),
           api.systemSettings(),
+          api.health(),
+          api.adminUpdateStatus().catch(() => null),
         ])
       setBasicInfo(mergeBasicInfo(basicInfoConfig))
       setMimo({ ...defaultMimo, ...mimoConfig, api_key: "" })
       setEmail(mergeEmailConfig(emailConfig))
       setSmtpPassword("")
       setMailApiToken("")
+      setLinuxDoSecret("")
       setTestEmailTo(user?.email ?? "")
       setBilling(mergeBillingConfig(billingConfig))
+      setAudioRetention(mergeAudioRetentionConfig(audioRetentionConfig))
       setPlans(normalizePlans(billingConfig.plans ?? []))
       setSettings(systemSettings)
+      setHealth(healthReport)
+      setUpdateStatus(updateReport)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "系统设置获取失败")
     }
@@ -391,14 +458,20 @@ export default function SystemSettingsPage() {
             mimoConfig,
             emailConfig,
             billingConfig,
+            audioRetentionConfig,
             systemSettings,
+            healthReport,
+            updateReport,
           ] =
             await Promise.all([
               api.adminBasicInfo(),
               api.adminMimoConfig(),
               api.adminEmailAuthConfig(),
               api.adminBillingConfig(),
+              api.adminAudioRetention(),
               api.systemSettings(),
+              api.health(),
+              api.adminUpdateStatus().catch(() => null),
             ])
 
           if (cancelled) {
@@ -410,10 +483,14 @@ export default function SystemSettingsPage() {
           setEmail(mergeEmailConfig(emailConfig))
           setSmtpPassword("")
           setMailApiToken("")
+          setLinuxDoSecret("")
           setTestEmailTo(user?.email ?? "")
           setBilling(mergeBillingConfig(billingConfig))
+          setAudioRetention(mergeAudioRetentionConfig(audioRetentionConfig))
           setPlans(normalizePlans(billingConfig.plans ?? []))
           setSettings(systemSettings)
+          setHealth(healthReport)
+          setUpdateStatus(updateReport)
         } catch (error) {
           if (!cancelled) {
             toast.error(error instanceof Error ? error.message : "系统设置获取失败")
@@ -441,6 +518,32 @@ export default function SystemSettingsPage() {
     }
   }
 
+  async function uploadBasicIcon(file: File | null) {
+    if (! file) {
+      return
+    }
+
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error("图标文件不能超过 2MB")
+      return
+    }
+
+    setSaving("basic-icon")
+
+    try {
+      const saved = await api.uploadAdminBasicIcon(file)
+      setBasicInfo(mergeBasicInfo(saved))
+      toast.success("站点图标已上传")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "站点图标上传失败")
+    } finally {
+      setSaving(null)
+      if (iconInputRef.current) {
+        iconInputRef.current.value = ""
+      }
+    }
+  }
+
   async function saveMimo() {
     setSaving("mimo")
 
@@ -461,7 +564,12 @@ export default function SystemSettingsPage() {
     try {
       const saved = await api.saveAdminEmailAuthConfig({
         enabled: email.enabled,
+        registration_enabled: email.registration_enabled !== false,
         verification_required: email.verification_required,
+        linuxdo_enabled: email.linuxdo?.enabled !== false,
+        linuxdo_client_id: email.linuxdo?.client_id ?? "",
+        linuxdo_client_secret: linuxDoSecret || undefined,
+        linuxdo_redirect_uri: email.linuxdo?.redirect_uri ?? "",
         ...emailDeliveryPayload(),
         verification_subject:
           email.templates?.verification?.subject ??
@@ -478,6 +586,8 @@ export default function SystemSettingsPage() {
       })
       setEmail(mergeEmailConfig(saved))
       setSmtpPassword("")
+      setMailApiToken("")
+      setLinuxDoSecret("")
       toast.success("认证配置已保存")
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "认证配置保存失败")
@@ -574,6 +684,58 @@ export default function SystemSettingsPage() {
     }
   }
 
+  async function saveAudioRetention() {
+    const days = Number(audioRetention.retention_days)
+    if (!Number.isFinite(days) || days < 1 || days > 3650) {
+      toast.error("保存时长需在 1 到 3650 天之间")
+      return
+    }
+
+    setSaving("retention")
+
+    try {
+      const saved = await api.saveAdminAudioRetention({
+        enabled: Boolean(audioRetention.enabled),
+        retention_days: Math.round(days),
+      })
+      setAudioRetention(mergeAudioRetentionConfig(saved))
+      toast.success("音频清理策略已保存")
+      void refresh()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "音频清理策略保存失败")
+    } finally {
+      setSaving(null)
+    }
+  }
+
+  async function checkForUpdates() {
+    setSaving("update-check")
+
+    try {
+      const status = await api.adminUpdateStatus()
+      setUpdateStatus(status)
+      toast.success(status.updateAvailable ? "发现可用更新" : "当前已是最新状态")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "检测更新失败")
+    } finally {
+      setSaving(null)
+    }
+  }
+
+  async function runUpdate(mode?: "source" | "docker") {
+    setSaving("update-run")
+
+    try {
+      const result = await api.runAdminUpdate(mode)
+      setUpdateStatus(result.status)
+      toast.success(result.message)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "启动升级失败")
+    } finally {
+      setSaving(null)
+    }
+  }
+
   function updatePlan(index: number, patch: Partial<PlanDraft>) {
     setPlans((current) =>
       current.map((plan, planIndex) =>
@@ -645,10 +807,24 @@ export default function SystemSettingsPage() {
   const senderConfigured = Boolean(
     email.sender_configured || email.sender?.address || email.sender?.name
   )
+  const registrationEnabled = email.registration_enabled !== false
+  const linuxDoEnabled = email.linuxdo?.enabled !== false
+  const linuxDoConfigured = Boolean(
+    email.linuxdo?.configured ||
+      email.linuxdo?.client_id ||
+      email.linuxdo?.client_secret_configured
+  )
   const isEmailApi = (email.driver ?? "smtp") === "api"
   const isResendProvider = email.api?.provider === "resend"
   const deliveryConfigured = isEmailApi ? apiConfigured : smtpConfigured
-  const latestSetting = settings[0]?.updatedAt ?? "未记录"
+  const retentionDays = Number(audioRetention.retention_days || 0)
+  const retentionLastPrunedAt =
+    audioRetention.last_pruned_at ?? audioRetention.lastPrunedAt ?? "未执行"
+  const retentionLastPrunedCount =
+    audioRetention.last_pruned_count ?? audioRetention.lastPrunedCount ?? 0
+  const updateAvailable = Boolean(
+    updateStatus?.updateAvailable ?? updateStatus?.update_available
+  )
 
   const sections: Array<{
     value: SettingsTab
@@ -677,7 +853,7 @@ export default function SystemSettingsPage() {
     {
       value: "mail",
       title: "登录与邮件",
-      badge: email.enabled ? "启用" : "停用",
+      badge: email.enabled || (linuxDoEnabled && linuxDoConfigured) ? "启用" : "停用",
       icon: IconMailCog,
     },
     {
@@ -687,12 +863,33 @@ export default function SystemSettingsPage() {
       icon: IconCreditCardPay,
     },
     {
+      value: "retention",
+      title: "音频清理",
+      badge: audioRetention.enabled ? `${retentionDays} 天` : "关闭",
+      icon: IconTrash,
+    },
+    {
+      value: "updates",
+      title: "系统更新",
+      badge: updateAvailable ? "可升级" : "检测",
+      icon: IconCloudDownload,
+    },
+    {
       value: "records",
       title: "保存记录",
       badge: `${settings.length} 项`,
       icon: IconHistory,
     },
   ]
+  const buildInfo = health?.build ?? basicInfo.build
+  const builtAt = buildInfo?.builtAt ?? buildInfo?.built_at ?? "未记录"
+  const deploymentMode = updateStatus?.deployment?.mode ?? "source"
+  const healthTone = health?.status === "ok" ? "positive" : "neutral"
+  const healthLabel = {
+    ok: "正常",
+    degraded: "需配置",
+    error: "异常",
+  }[health?.status ?? "degraded"]
 
   return (
     <>
@@ -773,18 +970,56 @@ export default function SystemSettingsPage() {
                       description={isEmailApi ? "邮件 API" : "SMTP"}
                     />
                     <SummaryTile
-                      label="启用套餐"
-                      value={`${activePlans.length}`}
-                      description={`共 ${plans.length} 个套餐`}
+                      label="音频保存"
+                      value={audioRetention.enabled ? `${retentionDays} 天` : "长期保存"}
+                      description={`上次清理 ${retentionLastPrunedAt}`}
                     />
                     <SummaryTile
-                      label="保存记录"
-                      value={`${settings.length}`}
-                      description={`最近更新时间 ${latestSetting}`}
+                      label="后台版本"
+                      value={buildInfo?.version || "dev"}
+                      description={`构建 ${builtAt}`}
                     />
                   </div>
 
                   <div className="grid gap-4 lg:grid-cols-2">
+                    <Card className="border-border/70 bg-muted/20 shadow-none">
+                      <CardHeader>
+                        <CardTitle>运行健康</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        <StatusRow
+                          label="健康状态"
+                          value={healthLabel}
+                          tone={healthTone}
+                        />
+                        <StatusRow
+                          label="版本"
+                          value={buildInfo?.version || "dev"}
+                        />
+                        <StatusRow
+                          label="构建时间"
+                          value={builtAt}
+                        />
+                        {health && (
+                          <div className="grid gap-2 sm:grid-cols-2">
+                            {Object.entries(health.checks).map(([key, check]) => (
+                              <div
+                                key={key}
+                                className="flex items-center justify-between gap-2 rounded-lg border border-border/70 px-3 py-2 text-sm"
+                              >
+                                <span className="truncate text-muted-foreground">
+                                  {healthCheckLabel(key)}
+                                </span>
+                                <Badge variant={check.ok ? "secondary" : "outline"}>
+                                  {check.ok ? "正常" : "检查"}
+                                </Badge>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+
                     <Card className="border-border/70 bg-muted/20 shadow-none">
                       <CardHeader>
                         <CardTitle>认证策略</CardTitle>
@@ -812,7 +1047,7 @@ export default function SystemSettingsPage() {
                       </CardContent>
                     </Card>
 
-                    <Card className="border-border/70 bg-muted/20 shadow-none">
+                    <Card className="border-border/70 bg-muted/20 shadow-none lg:col-span-2">
                       <CardHeader>
                         <CardTitle>计费策略</CardTitle>
                       </CardHeader>
@@ -856,6 +1091,11 @@ export default function SystemSettingsPage() {
                       description={basicInfo.site_title || "站点标题未设置"}
                     />
                     <SummaryTile
+                      label="站点图标"
+                      value={basicInfo.icon_url ? "已设置" : "默认图标"}
+                      description={basicInfo.icon_url || "跟随左上角默认图标"}
+                    />
+                    <SummaryTile
                       label="站点地址"
                       value={formatEndpoint(basicInfo.app_url)}
                       description={basicInfo.app_url || "API 基地址"}
@@ -864,11 +1104,6 @@ export default function SystemSettingsPage() {
                       label="前端地址"
                       value={formatEndpoint(basicInfo.frontend_url)}
                       description={basicInfo.frontend_url || "前端入口"}
-                    />
-                    <SummaryTile
-                      label="支持邮箱"
-                      value={basicInfo.support_email || "未设置"}
-                      description={basicInfo.icp_record || "ICP备案号未设置"}
                     />
                   </div>
 
@@ -928,7 +1163,69 @@ export default function SystemSettingsPage() {
                             site_subtitle: event.target.value,
                           }))
                         }
-                      />
+                        />
+                      </Field>
+                    <Field>
+                      <FieldHelpLabel
+                        htmlFor="basic-icon-url"
+                        requirement="optional"
+                        help="填写图片 URL 后，侧边栏左上角会同步显示这个图标。"
+                      >
+                        站点图标
+                      </FieldHelpLabel>
+                      <div className="flex gap-3">
+                        <div className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-primary text-primary-foreground">
+                          {basicInfo.icon_url ? (
+                            <Image
+                              src={basicInfo.icon_url}
+                              alt=""
+                              width={36}
+                              height={36}
+                              unoptimized
+                              className="size-full object-cover"
+                            />
+                          ) : (
+                            <IconMicrophone className="size-4" />
+                          )}
+                        </div>
+                        <div className="flex min-w-0 flex-1 gap-2">
+                          <Input
+                            id="basic-icon-url"
+                            type="url"
+                            value={basicInfo.icon_url ?? ""}
+                            onChange={(event) =>
+                              setBasicInfo((current) => ({
+                                ...current,
+                                icon_url: event.target.value,
+                              }))
+                            }
+                            placeholder="https://example.com/icon.png"
+                            className="min-w-0"
+                          />
+                          <input
+                            ref={iconInputRef}
+                            type="file"
+                            accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml,image/x-icon"
+                            className="hidden"
+                            onChange={(event) =>
+                              void uploadBasicIcon(event.target.files?.[0] ?? null)
+                            }
+                          />
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => iconInputRef.current?.click()}
+                            disabled={saving === "basic-icon"}
+                          >
+                            {saving === "basic-icon" ? (
+                              <IconLoader2 data-icon="inline-start" />
+                            ) : (
+                              <IconUpload data-icon="inline-start" />
+                            )}
+                            上传
+                          </Button>
+                        </div>
+                      </div>
                     </Field>
                     <Field>
                       <FieldHelpLabel
@@ -1129,23 +1426,42 @@ export default function SystemSettingsPage() {
               <Card className="border-border/70 shadow-sm">
                 <CardHeader>
                   <CardAction>
-                    <Badge variant={email.enabled ? "secondary" : "outline"}>
-                      {email.enabled ? "启用" : "停用"}
+                    <Badge
+                      variant={
+                        email.enabled || (linuxDoEnabled && linuxDoConfigured)
+                          ? "secondary"
+                          : "outline"
+                      }
+                    >
+                      {email.enabled || (linuxDoEnabled && linuxDoConfigured)
+                        ? "启用"
+                        : "停用"}
                     </Badge>
                   </CardAction>
                   <CardTitle>登录与邮件</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-6">
-                  <div className="grid gap-3 md:grid-cols-3">
+                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                     <SummaryTile
                       label="邮箱登录"
                       value={email.enabled ? "启用" : "停用"}
-                      description="控制邮箱注册与登录入口"
+                      description="邮箱账号登录入口"
                     />
                     <SummaryTile
-                      label="邮箱验证"
-                      value={email.verification_required ? "必需" : "关闭"}
-                      description="注册后是否要求验证"
+                      label="开放注册"
+                      value={registrationEnabled ? "开放" : "关闭"}
+                      description="控制新用户注册"
+                    />
+                    <SummaryTile
+                      label="LinuxDo 登录"
+                      value={
+                        linuxDoEnabled && linuxDoConfigured
+                          ? "启用"
+                          : linuxDoConfigured
+                            ? "停用"
+                            : "待配置"
+                      }
+                      description="LinuxDo Connect"
                     />
                     <SummaryTile
                       label="投递通道"
@@ -1165,6 +1481,43 @@ export default function SystemSettingsPage() {
                             checked={Boolean(email.enabled)}
                             onCheckedChange={(enabled) =>
                               setEmail((current) => ({ ...current, enabled }))
+                            }
+                          />
+                        </Field>
+                      </div>
+
+                      <div className="rounded-2xl border border-border/70 bg-muted/20 p-4">
+                        <Field orientation="horizontal">
+                          <FieldContent>
+                            <FieldTitle>开放注册</FieldTitle>
+                          </FieldContent>
+                          <Switch
+                            checked={registrationEnabled}
+                            onCheckedChange={(registration_enabled) =>
+                              setEmail((current) => ({
+                                ...current,
+                                registration_enabled,
+                              }))
+                            }
+                          />
+                        </Field>
+                      </div>
+
+                      <div className="rounded-2xl border border-border/70 bg-muted/20 p-4">
+                        <Field orientation="horizontal">
+                          <FieldContent>
+                            <FieldTitle>LinuxDo 登录</FieldTitle>
+                          </FieldContent>
+                          <Switch
+                            checked={linuxDoEnabled}
+                            onCheckedChange={(enabled) =>
+                              setEmail((current) => ({
+                                ...current,
+                                linuxdo: {
+                                  ...current.linuxdo,
+                                  enabled,
+                                },
+                              }))
                             }
                           />
                         </Field>
@@ -1197,6 +1550,97 @@ export default function SystemSettingsPage() {
                     </div>
 
                     <div className="rounded-2xl border border-border/70 p-4">
+                      <div className="mb-5 rounded-xl border border-border/70 bg-muted/20 p-3">
+                        <div className="mb-4 flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-2 font-medium">
+                            <IconBrandOauth className="size-4 text-primary" />
+                            LinuxDo Connect
+                          </div>
+                          <Badge
+                            variant={
+                              linuxDoEnabled && linuxDoConfigured
+                                ? "secondary"
+                                : "outline"
+                            }
+                          >
+                            {linuxDoEnabled && linuxDoConfigured
+                              ? "启用"
+                              : linuxDoConfigured
+                                ? "停用"
+                                : "待配置"}
+                          </Badge>
+                        </div>
+                        <FieldGroup className="grid gap-4 lg:grid-cols-2">
+                          <Field>
+                            <FieldHelpLabel
+                              htmlFor="linuxdo-client-id"
+                              requirement="optional"
+                              help="LinuxDo Connect 应用的 Client ID。"
+                            >
+                              Client ID
+                            </FieldHelpLabel>
+                            <Input
+                              id="linuxdo-client-id"
+                              value={email.linuxdo?.client_id ?? ""}
+                              onChange={(event) =>
+                                setEmail((current) => ({
+                                  ...current,
+                                  linuxdo: {
+                                    ...current.linuxdo,
+                                    client_id: event.target.value,
+                                  },
+                                }))
+                              }
+                            />
+                          </Field>
+                          <Field>
+                            <FieldHelpLabel
+                              htmlFor="linuxdo-client-secret"
+                              requirement="optional"
+                              help="留空保存时保留当前 Client Secret。"
+                            >
+                              Client Secret
+                            </FieldHelpLabel>
+                            <Input
+                              id="linuxdo-client-secret"
+                              type="password"
+                              value={linuxDoSecret}
+                              onChange={(event) =>
+                                setLinuxDoSecret(event.target.value)
+                              }
+                              placeholder={
+                                email.linuxdo?.client_secret_configured
+                                  ? "保持当前 Secret"
+                                  : ""
+                              }
+                            />
+                          </Field>
+                          <Field className="lg:col-span-2">
+                            <FieldHelpLabel
+                              htmlFor="linuxdo-redirect-uri"
+                              requirement="optional"
+                              help="需要与 LinuxDo Connect 后台登记的回调地址一致。"
+                            >
+                              Redirect URI
+                            </FieldHelpLabel>
+                            <Input
+                              id="linuxdo-redirect-uri"
+                              type="url"
+                              value={email.linuxdo?.redirect_uri ?? ""}
+                              onChange={(event) =>
+                                setEmail((current) => ({
+                                  ...current,
+                                  linuxdo: {
+                                    ...current.linuxdo,
+                                    redirect_uri: event.target.value,
+                                  },
+                                }))
+                              }
+                            />
+                          </Field>
+                        </FieldGroup>
+                      </div>
+
                       <FieldGroup className="grid gap-5 lg:grid-cols-2">
                         <Field>
                           <FieldHelpLabel
@@ -1546,7 +1990,7 @@ export default function SystemSettingsPage() {
                             ) : (
                               <IconDeviceFloppy data-icon="inline-start" />
                             )}
-                            保存邮箱配置
+                            保存登录配置
                           </Button>
                         </div>
                       </div>
@@ -1660,11 +2104,6 @@ export default function SystemSettingsPage() {
                       label="启用套餐"
                       value={`${activePlans.length}`}
                       description={`共 ${plans.length} 个套餐`}
-                    />
-                    <SummaryTile
-                      label="签到"
-                      value={billing.checkin?.enabled ? "启用" : "停用"}
-                      description={`${billing.checkin?.daily_quota ?? 0} 额度/日`}
                     />
                   </div>
 
@@ -2072,6 +2511,235 @@ export default function SystemSettingsPage() {
               </Card>
             </TabsContent>
 
+            <TabsContent value="retention" className="m-0 space-y-4">
+              <Card className="border-border/70 shadow-sm">
+                <CardHeader>
+                  <CardAction>
+                    <Badge variant={audioRetention.enabled ? "secondary" : "outline"}>
+                      {audioRetention.enabled ? "自动清理" : "长期保存"}
+                    </Badge>
+                  </CardAction>
+                  <CardTitle>音频保存策略</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-5">
+                  <div className="grid gap-3 md:grid-cols-3">
+                    <SummaryTile
+                      label="当前策略"
+                      value={audioRetention.enabled ? "按期删除" : "长期保存"}
+                      description={
+                        audioRetention.enabled
+                          ? `完成或失败超过 ${retentionDays} 天的任务会清理`
+                          : "不会按时间自动删除任务音频"
+                      }
+                    />
+                    <SummaryTile
+                      label="保存时长"
+                      value={`${retentionDays} 天`}
+                      description="作用于完成和失败的音频任务"
+                    />
+                    <SummaryTile
+                      label="上次清理"
+                      value={`${retentionLastPrunedCount} 个任务`}
+                      description={retentionLastPrunedAt}
+                    />
+                  </div>
+
+                  <FieldGroup className="grid gap-5 lg:grid-cols-[1fr_220px]">
+                    <Field className="rounded-2xl border border-border/70 bg-muted/20 px-4 py-4">
+                      <div className="flex items-start justify-between gap-4">
+                        <FieldContent>
+                          <FieldTitle>启用自动清理</FieldTitle>
+                          <div className="mt-1 text-sm text-muted-foreground">
+                            开启后，系统会删除超过保存时长的任务记录和关联音频文件。
+                          </div>
+                        </FieldContent>
+                        <Switch
+                          checked={Boolean(audioRetention.enabled)}
+                          onCheckedChange={(checked) =>
+                            setAudioRetention((current) => ({
+                              ...current,
+                              enabled: Boolean(checked),
+                            }))
+                          }
+                        />
+                      </div>
+                    </Field>
+
+                    <Field>
+                      <FieldHelpLabel
+                        htmlFor="audio-retention-days"
+                        help="范围 1-3650 天；到期后会删除任务记录、源文件和生成文件。"
+                      >
+                        保存时长
+                      </FieldHelpLabel>
+                      <Input
+                        id="audio-retention-days"
+                        type="number"
+                        min={1}
+                        max={3650}
+                        step={1}
+                        value={audioRetention.retention_days}
+                        onChange={(event) =>
+                          setAudioRetention((current) => ({
+                            ...current,
+                            retention_days: Number(event.target.value),
+                          }))
+                        }
+                      />
+                    </Field>
+                  </FieldGroup>
+
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <StatusRow
+                      label="音频清理"
+                      value={audioRetention.enabled ? "启用" : "关闭"}
+                    />
+                    <StatusRow
+                      label="保存时长"
+                      value={`${retentionDays} 天`}
+                    />
+                    <StatusRow
+                      label="上次清理"
+                      value={retentionLastPrunedAt}
+                    />
+                    <StatusRow
+                      label="清理数量"
+                      value={`${retentionLastPrunedCount} 个任务`}
+                    />
+                  </div>
+                </CardContent>
+                <CardFooter className="justify-end">
+                  <SaveButton
+                    pending={saving === "retention"}
+                    onClick={() => void saveAudioRetention()}
+                  />
+                </CardFooter>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="updates" className="m-0 space-y-4">
+              <Card className="border-border/70 shadow-sm">
+                <CardHeader>
+                  <CardAction>
+                    <Badge
+                      variant={updateAvailable ? "secondary" : "outline"}
+                    >
+                      {updateAvailable ? "可升级" : "待检测"}
+                    </Badge>
+                  </CardAction>
+                  <CardTitle>系统更新</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-5">
+                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                    <SummaryTile
+                      label="当前版本"
+                      value={updateStatus?.current?.version || buildInfo?.version || "dev"}
+                      description={updateStatus?.current?.commit || buildInfo?.commit || "本地构建"}
+                    />
+                    <SummaryTile
+                      label="最新版本"
+                      value={updateStatus?.latest?.version || "未检测"}
+                      description={updateStatus?.latest?.published_at || updateStatus?.latest?.error || "GitHub Release"}
+                    />
+                    <SummaryTile
+                      label="部署方式"
+                      value={updateStatus?.deployment?.label || "自动识别"}
+                      description={updateStatus?.executor?.message || "后台执行默认关闭"}
+                    />
+                    <SummaryTile
+                      label="数据库迁移"
+                      value={updateStatus?.latest?.migration_required ? "需要" : "不需要"}
+                      description="按发布清单判断"
+                    />
+                  </div>
+
+                  {updateStatus?.latest?.error && (
+                    <div className="rounded-2xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+                      {updateStatus.latest.error}
+                    </div>
+                  )}
+
+                  <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+                    <div className="rounded-2xl border border-border/70 bg-muted/20 p-4">
+                      <div className="flex items-center gap-2 font-medium">
+                        <IconTerminal2 className="size-4 text-primary" />
+                        升级命令
+                      </div>
+                      <div className="mt-3 space-y-2">
+                        {(updateStatus?.commands ?? []).map((command, index) => (
+                          <code
+                            key={`${command}-${index}`}
+                            className="block overflow-x-auto rounded-lg border bg-background px-3 py-2 text-xs"
+                          >
+                            {command}
+                          </code>
+                        ))}
+                        {(!updateStatus || updateStatus.commands.length === 0) && (
+                          <div className="text-sm text-muted-foreground">
+                            点击检测更新后生成当前部署方式的升级命令。
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="space-y-3 rounded-2xl border border-border/70 bg-background p-4 shadow-sm">
+                      <StatusRow
+                        label="后台执行"
+                        value={updateStatus?.executor?.enabled ? "已开启" : "未开启"}
+                      />
+                      <StatusRow
+                        label="最新来源"
+                        value={updateStatus?.latest?.manifest_url || "GitHub Release"}
+                      />
+                      <StatusRow
+                        label="检查时间"
+                        value={updateStatus?.checkedAt ?? updateStatus?.checked_at ?? "未检测"}
+                      />
+                    </div>
+                  </div>
+
+                  {updateStatus?.latest?.changelog_url && (
+                    <Button type="button" variant="outline" asChild>
+                      <a
+                        href={updateStatus.latest.changelog_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        查看更新日志
+                      </a>
+                    </Button>
+                  )}
+                </CardContent>
+                <CardFooter className="flex flex-wrap justify-end gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => void checkForUpdates()}
+                    disabled={saving === "update-check"}
+                  >
+                    {saving === "update-check" ? (
+                      <IconLoader2 data-icon="inline-start" />
+                    ) : (
+                      <IconRefresh data-icon="inline-start" />
+                    )}
+                    检测更新
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={() => void runUpdate(updateStatus?.deployment?.mode)}
+                    disabled={saving === "update-run" || !updateStatus}
+                  >
+                    {saving === "update-run" ? (
+                      <IconLoader2 data-icon="inline-start" />
+                    ) : (
+                      <IconCloudDownload data-icon="inline-start" />
+                    )}
+                    {deploymentMode === "docker" ? "生成命令" : "一键升级"}
+                  </Button>
+                </CardFooter>
+              </Card>
+            </TabsContent>
+
             <TabsContent value="records" className="m-0 space-y-4">
               <Card className="border-border/70 shadow-sm">
                 <CardHeader>
@@ -2139,15 +2807,19 @@ function SummaryTile({
   description: string
 }) {
   return (
-    <div className="rounded-2xl border border-border/70 bg-background px-4 py-4 shadow-sm">
-      <div className="text-sm text-muted-foreground">{label}</div>
+    <div className="min-w-0 rounded-2xl border border-border/70 bg-background px-4 py-4 shadow-sm">
+      <div className="truncate text-sm text-muted-foreground" title={label}>
+        {label}
+      </div>
       <div
         className="mt-2 truncate text-2xl font-semibold tracking-normal"
         title={value}
       >
         {value}
       </div>
-      <div className="mt-3 text-sm text-muted-foreground">{description}</div>
+      <div className="mt-3 truncate text-sm text-muted-foreground" title={description}>
+        {description}
+      </div>
     </div>
   )
 }
@@ -2156,7 +2828,12 @@ const statusRowIcons: Record<string, typeof IconBolt> = {
   "全局 AI": IconSparkles,
   "API 地址": IconApi,
   接口域名: IconWorldWww,
+  健康状态: IconServerCog,
+  版本: IconPackage,
+  构建时间: IconHistory,
   邮箱登录: IconMailCheck,
+  开放注册: IconUserPlus,
+  "LinuxDo 登录": IconBrandOauth,
   邮箱验证: IconShieldCheck,
   发件身份: IconMailForward,
   投递通道: IconMailCog,
@@ -2166,7 +2843,26 @@ const statusRowIcons: Record<string, typeof IconBolt> = {
   支付网关: IconCreditCardPay,
   默认套餐: IconPackage,
   积分倍率: IconPercentage,
+  音频保存: IconClock,
+  音频清理: IconTrash,
+  保存时长: IconClock,
+  上次清理: IconHistory,
+  清理数量: IconTrash,
   保存记录: IconHistory,
+}
+
+function healthCheckLabel(key: string) {
+  return {
+    database: "数据库",
+    storage: "storage",
+    cache: "bootstrap/cache",
+    audio_storage: "音频目录",
+    app_key: "APP_KEY",
+    app_url: "后端地址",
+    frontend_url: "前端地址",
+    mimo_api: "Mimo API",
+    auth_method: "登录方式",
+  }[key] ?? key
 }
 
 function StatusRow({

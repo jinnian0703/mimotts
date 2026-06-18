@@ -78,12 +78,16 @@ class LinuxDoOAuthService
         return $this->hasOAuthCredentials($this->resolvedConfig());
     }
 
+    public function existingUser(array $profile): ?User
+    {
+        $linuxdoId = $this->profileId($profile);
+
+        return User::where('linuxdo_id', $linuxdoId)->first();
+    }
+
     public function syncUser(array $profile): User
     {
-        $linuxdoId = (string) (Arr::get($profile, 'sub') ?? Arr::get($profile, 'id'));
-        if ($linuxdoId === '') {
-            throw new RuntimeException('LinuxDo 用户信息缺少用户标识');
-        }
+        $linuxdoId = $this->profileId($profile);
 
         $email = Arr::get($profile, 'email');
         $email = is_string($email) && $email !== '' ? Str::lower($email) : null;
@@ -116,12 +120,23 @@ class LinuxDoOAuthService
         return $syncedUser;
     }
 
+    public function profileId(array $profile): string
+    {
+        $linuxdoId = (string) (Arr::get($profile, 'sub') ?? Arr::get($profile, 'id'));
+        if ($linuxdoId === '') {
+            throw new RuntimeException('LinuxDo 用户信息缺少用户标识');
+        }
+
+        return $linuxdoId;
+    }
+
     private function resolvedConfig(): array
     {
         $service = config('services.linuxdo', []);
         $stored = $this->storedConfig();
 
         return [
+            'enabled' => array_key_exists('enabled', $stored) ? (bool) $stored['enabled'] : true,
             'client_id' => $stored['client_id'] ?? $service['client_id'] ?? null,
             'client_secret' => $stored['client_secret'] ?? $service['client_secret'] ?? null,
             'redirect_uri' => $stored['redirect_uri'] ?? $service['redirect_uri'] ?? null,
@@ -135,7 +150,7 @@ class LinuxDoOAuthService
     private function storedConfig(): array
     {
         try {
-            $setting = SystemSetting::where('key', 'linuxdo_connect_config')->first();
+            $setting = SystemSetting::where('key', InstallService::LINUXDO_AUTH_KEY)->first();
             $value = $setting ? $setting->decodedValue() : null;
 
             return is_array($value) ? $value : [];
@@ -146,7 +161,8 @@ class LinuxDoOAuthService
 
     private function hasOAuthCredentials(array $config): bool
     {
-        return ! empty($config['client_id'])
+        return ! empty($config['enabled'])
+            && ! empty($config['client_id'])
             && ! empty($config['client_secret'])
             && ! empty($config['redirect_uri']);
     }

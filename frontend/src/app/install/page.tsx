@@ -2,11 +2,19 @@
 
 import { useEffect, useState, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
-import { IconCheck, IconLoader2 } from "@tabler/icons-react"
+import {
+  IconAlertTriangle,
+  IconCheck,
+  IconCircleCheck,
+  IconLoader2,
+  IconSettings,
+} from "@tabler/icons-react"
 import { toast } from "sonner"
 
-import { api } from "@/lib/api"
+import { api, apiPath } from "@/lib/api"
 import { setStoredInstallStatus } from "@/lib/session"
+import type { InstallStatus } from "@/lib/types"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -36,6 +44,19 @@ import {
 import { Switch } from "@/components/ui/switch"
 
 type Requirement = "required" | "optional"
+type DatabaseConnection = "mysql" | "sqlite"
+
+function buildLinuxDoRedirectUri(origin: string) {
+  if (!origin) {
+    return ""
+  }
+
+  try {
+    return new URL(apiPath("/auth/linuxdo/callback"), origin).toString()
+  } catch {
+    return `${origin.replace(/\/$/, "")}${apiPath("/auth/linuxdo/callback")}`
+  }
+}
 
 function RequirementBadge({ requirement }: { requirement: Requirement }) {
   return (
@@ -79,9 +100,13 @@ function FieldLabelWithRequirement({
 
 export default function InstallPage() {
   const router = useRouter()
+  const [installStatus, setInstallStatus] = useState<InstallStatus | null>(null)
+  const [statusLoading, setStatusLoading] = useState(true)
   const [pending, setPending] = useState(false)
   const [smtpEnabled, setSmtpEnabled] = useState(false)
   const [mailDriver, setMailDriver] = useState<"smtp" | "api">("smtp")
+  const [dbConnection, setDbConnection] =
+    useState<DatabaseConnection>("mysql")
   const [appUrl, setAppUrl] = useState("")
   const [frontendUrl, setFrontendUrl] = useState("")
   const [linuxdoRedirectUri, setLinuxdoRedirectUri] = useState("")
@@ -91,10 +116,41 @@ export default function InstallPage() {
       const origin = window.location.origin
       setAppUrl(origin)
       setFrontendUrl(origin)
-      setLinuxdoRedirectUri(`${origin}/api/auth/linuxdo/callback`)
+      setLinuxdoRedirectUri(buildLinuxDoRedirectUri(origin))
     }, 0)
 
     return () => window.clearTimeout(timeout)
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+
+    api
+      .installStatus()
+      .then((status) => {
+        if (!cancelled) {
+          setInstallStatus(status)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setInstallStatus({
+            installed: false,
+            installState: "config_error",
+            stateMessage: "安装状态读取失败，请检查 API 入口、数据库和 APP_KEY",
+            configError: true,
+          })
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setStatusLoading(false)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -106,6 +162,15 @@ export default function InstallPage() {
     const linuxdoClientSecret = String(
       data.get("linuxdo_client_secret") || ""
     ).trim()
+    const selectedDbConnection: DatabaseConnection =
+      String(data.get("db_connection") || "mysql") === "sqlite"
+        ? "sqlite"
+        : "mysql"
+    const dbHost = String(data.get("db_host") || "").trim()
+    const dbPort = Number(data.get("db_port") || 3306)
+    const dbDatabase = String(data.get("db_database") || "").trim()
+    const dbUsername = String(data.get("db_username") || "").trim()
+    const dbPassword = String(data.get("db_password") || "")
 
     if (
       (linuxdoClientId && !linuxdoClientSecret) ||
@@ -116,9 +181,32 @@ export default function InstallPage() {
       return
     }
 
+    if (
+      selectedDbConnection === "mysql" &&
+      (!dbHost || !dbPort || !dbDatabase || !dbUsername || !dbPassword)
+    ) {
+      toast.error("请完整填写数据库连接信息")
+      setPending(false)
+      return
+    }
+
+    if (selectedDbConnection === "sqlite" && !dbDatabase) {
+      toast.error("请填写 SQLite 数据库文件名")
+      setPending(false)
+      return
+    }
+
     const payload = {
       app_url: appUrl,
       frontend_url: frontendUrl,
+      db_connection: selectedDbConnection,
+      db_host: selectedDbConnection === "mysql" ? dbHost : undefined,
+      db_port: selectedDbConnection === "mysql" ? dbPort : undefined,
+      db_database: dbDatabase,
+      db_username:
+        selectedDbConnection === "mysql" ? dbUsername : undefined,
+      db_password:
+        selectedDbConnection === "mysql" ? dbPassword : undefined,
       admin_name: String(data.get("admin_name") || ""),
       admin_email: String(data.get("admin_email") || ""),
       admin_password: String(data.get("admin_password") || ""),
@@ -170,8 +258,24 @@ export default function InstallPage() {
     }
   }
 
+  const installState =
+    installStatus?.installState ?? installStatus?.install_state ?? "uninstalled"
+  const missingConfig =
+    installStatus?.missingConfig ?? installStatus?.missing_config ?? []
+  const showInstallForm =
+    statusLoading || installState === "uninstalled"
+
   return (
     <main className="min-h-dvh bg-background px-4 py-6 sm:px-6 lg:px-8">
+      <div className="mx-auto mb-4 w-full max-w-6xl">
+        <InstallStatePanel
+          status={installStatus}
+          loading={statusLoading}
+          onLogin={() => router.replace("/login")}
+        />
+      </div>
+
+      {showInstallForm ? (
       <form onSubmit={handleSubmit} className="mx-auto w-full max-w-6xl">
         <Card>
           <CardHeader>
@@ -197,7 +301,11 @@ export default function InstallPage() {
                         name="app_url"
                         type="url"
                         value={appUrl}
-                        onChange={(event) => setAppUrl(event.target.value)}
+                        onChange={(event) => {
+                          const value = event.target.value
+                          setAppUrl(value)
+                          setLinuxdoRedirectUri(buildLinuxDoRedirectUri(value))
+                        }}
                         required
                       />
                     </Field>
@@ -219,6 +327,136 @@ export default function InstallPage() {
                         required
                       />
                     </Field>
+                  </FieldGroup>
+                </FieldSet>
+
+                <FieldSet>
+                  <FieldLegendWithRequirement requirement="required">
+                    数据库
+                  </FieldLegendWithRequirement>
+                  <FieldGroup className="grid gap-5 md:grid-cols-2">
+                    <Field className="md:col-span-2">
+                      <FieldLabelWithRequirement
+                        htmlFor="db_connection"
+                        requirement="required"
+                      >
+                        类型
+                      </FieldLabelWithRequirement>
+                      <Select
+                        name="db_connection"
+                        value={dbConnection}
+                        onValueChange={(value) =>
+                          setDbConnection(
+                            value === "sqlite" ? "sqlite" : "mysql"
+                          )
+                        }
+                      >
+                        <SelectTrigger id="db_connection" className="w-full">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectGroup>
+                            <SelectItem value="mysql">
+                              MySQL / MariaDB
+                            </SelectItem>
+                            <SelectItem value="sqlite">SQLite</SelectItem>
+                          </SelectGroup>
+                        </SelectContent>
+                      </Select>
+                    </Field>
+
+                    {dbConnection === "mysql" ? (
+                      <>
+                        <Field>
+                          <FieldLabelWithRequirement
+                            htmlFor="db_host"
+                            requirement="required"
+                          >
+                            主机
+                          </FieldLabelWithRequirement>
+                          <Input
+                            id="db_host"
+                            name="db_host"
+                            defaultValue="127.0.0.1"
+                            required
+                          />
+                        </Field>
+                        <Field>
+                          <FieldLabelWithRequirement
+                            htmlFor="db_port"
+                            requirement="required"
+                          >
+                            端口
+                          </FieldLabelWithRequirement>
+                          <Input
+                            id="db_port"
+                            name="db_port"
+                            type="number"
+                            min="1"
+                            max="65535"
+                            defaultValue="3306"
+                            required
+                          />
+                        </Field>
+                        <Field>
+                          <FieldLabelWithRequirement
+                            htmlFor="db_database"
+                            requirement="required"
+                          >
+                            数据库名
+                          </FieldLabelWithRequirement>
+                          <Input
+                            id="db_database"
+                            name="db_database"
+                            defaultValue="mimo"
+                            required
+                          />
+                        </Field>
+                        <Field>
+                          <FieldLabelWithRequirement
+                            htmlFor="db_username"
+                            requirement="required"
+                          >
+                            用户名
+                          </FieldLabelWithRequirement>
+                          <Input
+                            id="db_username"
+                            name="db_username"
+                            defaultValue="mimo"
+                            required
+                          />
+                        </Field>
+                        <Field className="md:col-span-2">
+                          <FieldLabelWithRequirement
+                            htmlFor="db_password"
+                            requirement="required"
+                          >
+                            密码
+                          </FieldLabelWithRequirement>
+                          <Input
+                            id="db_password"
+                            name="db_password"
+                            type="password"
+                            required
+                          />
+                        </Field>
+                      </>
+                    ) : (
+                      <Field className="md:col-span-2">
+                        <FieldLabelWithRequirement
+                          htmlFor="db_database"
+                          requirement="required"
+                        >
+                          数据库文件
+                        </FieldLabelWithRequirement>
+                        <Input
+                          id="db_database"
+                          name="db_database"
+                          defaultValue="database.sqlite"
+                          required
+                        />
+                      </Field>
+                    )}
                   </FieldGroup>
                 </FieldSet>
 
@@ -588,6 +826,163 @@ export default function InstallPage() {
           </CardFooter>
         </Card>
       </form>
+      ) : (
+        <div className="mx-auto w-full max-w-6xl">
+          <Card>
+            <CardHeader>
+              <CardTitle>
+                {installState === "installed_needs_config"
+                  ? "安装已完成，仍需补齐配置"
+                  : installState === "config_error"
+                    ? "配置异常"
+                    : "系统已安装"}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-3 md:grid-cols-3">
+                <InstallStateTile
+                  label="安装状态"
+                  value={stateLabel(installState)}
+                />
+                <InstallStateTile
+                  label="版本"
+                  value={installStatus?.build?.version || "dev"}
+                />
+                <InstallStateTile
+                  label="构建时间"
+                  value={
+                    installStatus?.build?.builtAt ??
+                    installStatus?.build?.built_at ??
+                    "未记录"
+                  }
+                />
+              </div>
+              {missingConfig.length > 0 && (
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {missingConfig.map((item) => (
+                    <Badge key={item} variant="outline">
+                      {missingConfigLabel(item)}
+                    </Badge>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+            <CardFooter className="justify-end">
+              <Button onClick={() => router.replace("/login")}>
+                <IconSettings data-icon="inline-start" />
+                进入登录页
+              </Button>
+            </CardFooter>
+          </Card>
+        </div>
+      )}
     </main>
   )
+}
+
+function InstallStatePanel({
+  status,
+  loading,
+  onLogin,
+}: {
+  status: InstallStatus | null
+  loading: boolean
+  onLogin: () => void
+}) {
+  if (loading) {
+    return (
+      <Alert>
+        <IconLoader2 />
+        <AlertTitle>正在读取安装状态</AlertTitle>
+        <AlertDescription>请稍候。</AlertDescription>
+      </Alert>
+    )
+  }
+
+  const state = status?.installState ?? status?.install_state ?? "uninstalled"
+  const missingConfig = status?.missingConfig ?? status?.missing_config ?? []
+
+  if (state === "config_error") {
+    return (
+      <Alert variant="destructive">
+        <IconAlertTriangle />
+        <AlertTitle>配置异常</AlertTitle>
+        <AlertDescription>
+          {status?.stateMessage ??
+            status?.state_message ??
+            "请检查 APP_KEY、数据库连接和已保存的加密配置。"}
+        </AlertDescription>
+      </Alert>
+    )
+  }
+
+  if (state === "installed_needs_config") {
+    return (
+      <Alert>
+        <IconAlertTriangle />
+        <AlertTitle>已安装但缺配置</AlertTitle>
+        <AlertDescription>
+          缺少 {missingConfig.map(missingConfigLabel).join("、") || "关键配置"}。
+          管理员登录后到系统配置页补齐即可。
+        </AlertDescription>
+      </Alert>
+    )
+  }
+
+  if (state === "installed") {
+    return (
+      <Alert>
+        <IconCircleCheck />
+        <AlertTitle>系统已安装</AlertTitle>
+        <AlertDescription>
+          当前版本 {status?.build?.version || "dev"}，可直接进入登录页。
+        </AlertDescription>
+        <Button size="sm" variant="outline" className="absolute right-2 top-2" onClick={onLogin}>
+          登录
+        </Button>
+      </Alert>
+    )
+  }
+
+  return (
+    <Alert>
+      <IconCheck />
+      <AlertTitle>系统未安装</AlertTitle>
+      <AlertDescription>填写下方信息后完成首次安装。</AlertDescription>
+    </Alert>
+  )
+}
+
+function InstallStateTile({
+  label,
+  value,
+}: {
+  label: string
+  value: string
+}) {
+  return (
+    <div className="rounded-xl border border-border/70 px-4 py-3">
+      <div className="text-sm text-muted-foreground">{label}</div>
+      <div className="mt-1 truncate font-medium" title={value}>
+        {value}
+      </div>
+    </div>
+  )
+}
+
+function stateLabel(state: string) {
+  return {
+    uninstalled: "未安装",
+    installed: "已安装",
+    installed_needs_config: "已安装但缺配置",
+    config_error: "配置异常",
+  }[state] ?? state
+}
+
+function missingConfigLabel(key: string) {
+  return {
+    mimo_api: "Mimo API",
+    auth_method: "登录方式",
+    email_sender: "发件身份",
+  }[key] ?? key
 }

@@ -12,6 +12,7 @@ class Kernel extends ConsoleKernel
 
     protected function schedule(Schedule $schedule): void
     {
+        $schedule->command('mimo:prune-audio-retention')->dailyAt('03:20')->withoutOverlapping();
     }
 
     protected function commands(): void

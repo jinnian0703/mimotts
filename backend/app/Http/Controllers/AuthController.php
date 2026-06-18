@@ -36,13 +36,14 @@ class AuthController
 
         $state = Str::random(40);
         $request->session()->put('linuxdo_oauth_state', $state);
+        $request->session()->forget(['linuxdo_oauth_mode', 'linuxdo_oauth_user_id']);
 
         return response()->json([
             'authorize_url' => $oauth->authorizationUrl($state),
         ]);
     }
 
-    public function callback(Request $request, LinuxDoOAuthService $oauth, AuditLogger $audit)
+    public function callback(Request $request, LinuxDoOAuthService $oauth, InstallService $install, AuditLogger $audit)
     {
         $request->validate([
             'code' => ['required', 'string'],
@@ -54,6 +55,19 @@ class AuthController
         }
 
         $profile = $oauth->fetchUser($request->query('code'));
+        if ($request->session()->pull('linuxdo_oauth_mode') === 'bind') {
+            return $this->bindLinuxDo($request, $oauth, $audit, $profile);
+        }
+
+        if (! $this->registrationEnabled($install) && ! $oauth->existingUser($profile)) {
+            return response()->json([
+                'error' => [
+                    'code' => 'RegistrationDisabled',
+                    'message' => '系统暂未开放注册',
+                ],
+            ], 403);
+        }
+
         $user = $oauth->syncUser($profile);
 
         if ($user->status === 'suspended') {
@@ -75,6 +89,54 @@ class AuthController
         }
 
         return redirect()->away($frontendUrl.'/');
+    }
+
+    private function bindLinuxDo(Request $request, LinuxDoOAuthService $oauth, AuditLogger $audit, array $profile)
+    {
+        $userId = $request->session()->pull('linuxdo_oauth_user_id');
+        $user = $request->user() ?: User::query()->find($userId);
+        $frontendUrl = rtrim(config('app.frontend_url'), '/');
+
+        if (! $user || (string) $user->id !== (string) $userId) {
+            return $request->expectsJson()
+                ? response()->json([
+                    'error' => [
+                        'code' => 'LinuxDoBindSessionExpired',
+                        'message' => '绑定会话已失效，请重新登录后再绑定',
+                    ],
+                ], 419)
+                : redirect()->away($frontendUrl.'/settings?linuxdo_bind=expired');
+        }
+
+        $linuxdoId = $oauth->profileId($profile);
+        $existingUser = User::query()
+            ->where('linuxdo_id', $linuxdoId)
+            ->where('id', '<>', $user->id)
+            ->first();
+
+        if ($existingUser) {
+            return $request->expectsJson()
+                ? response()->json([
+                    'error' => [
+                        'code' => 'LinuxDoAlreadyLinked',
+                        'message' => '该 LinuxDo 账号已绑定其他用户',
+                    ],
+                ], 422)
+                : redirect()->away($frontendUrl.'/settings?linuxdo_bind=conflict');
+        }
+
+        $user->forceFill([
+            'linuxdo_id' => $linuxdoId,
+            'avatar_url' => $user->avatar_url ?: ($profile['picture'] ?? $profile['avatar_url'] ?? null),
+        ])->save();
+
+        $audit->recordForUser($user, $request, 'account.linuxdo.link');
+
+        if ($request->expectsJson()) {
+            return response()->json(['user' => $user->fresh()]);
+        }
+
+        return redirect()->away($frontendUrl.'/settings?linuxdo_bind=success');
     }
 
     public function me(Request $request): JsonResponse
@@ -99,6 +161,15 @@ class AuthController
     {
         if ($response = $this->emailAuthUnavailable($install)) {
             return $response;
+        }
+
+        if (! $this->registrationEnabled($install)) {
+            return response()->json([
+                'error' => [
+                    'code' => 'RegistrationDisabled',
+                    'message' => '系统暂未开放注册',
+                ],
+            ], 403);
         }
 
         $data = $request->validate([
@@ -164,8 +235,13 @@ class AuthController
 
     public function emailLogin(Request $request, InstallService $install, AccountSecurityService $security, AuditLogger $audit): JsonResponse
     {
-        if ($response = $this->emailAuthUnavailable($install)) {
-            return $response;
+        if (! $install->isInstalled()) {
+            return response()->json([
+                'error' => [
+                    'code' => 'InstallationRequired',
+                    'message' => '系统尚未完成安装',
+                ],
+            ], 409);
         }
 
         $data = $request->validate([
@@ -187,6 +263,16 @@ class AuthController
             ], 401);
         }
 
+        $emailConfig = $install->emailAuthConfig();
+        if (! $emailConfig['enabled'] && ! $user->is_admin) {
+            return response()->json([
+                'error' => [
+                    'code' => 'EmailLoginDisabled',
+                    'message' => '邮箱登录未启用',
+                ],
+            ], 403);
+        }
+
         if ($user->status === 'suspended') {
             return response()->json([
                 'error' => [
@@ -196,7 +282,7 @@ class AuthController
             ], 403);
         }
 
-        if ($install->emailAuthConfig()['verification_required'] && ! $user->email_verified_at) {
+        if ($emailConfig['verification_required'] && ! $user->email_verified_at) {
             return response()->json([
                 'error' => [
                     'code' => 'EmailNotVerified',
@@ -343,6 +429,15 @@ class AuthController
         }
 
         return null;
+    }
+
+    private function registrationEnabled(InstallService $install): bool
+    {
+        $config = $install->emailAuthConfig();
+
+        return array_key_exists('registration_enabled', $config)
+            ? (bool) $config['registration_enabled']
+            : true;
     }
 
     private function emailUserQuery(string $email)

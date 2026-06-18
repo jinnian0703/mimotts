@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\AudioJob;
 use App\Models\User;
 use App\Services\MimoConfigService;
+use Illuminate\Http\Client\Factory as HttpFactory;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
@@ -15,17 +16,7 @@ class MimoBillingContextTest extends TestCase
 
     public function test_user_api_config_runs_without_billing_context(): void
     {
-        Http::fake([
-            'https://personal.example.com/chat/completions' => Http::response([
-                'choices' => [[
-                    'message' => [
-                        'audio' => [
-                            'data' => base64_encode('audio'),
-                        ],
-                    ],
-                ]],
-            ]),
-        ]);
+        $this->fakeMimoResponse('https://personal.example.com/chat/completions');
 
         $user = User::factory()->create();
         $user->apiConfig()->create([
@@ -51,19 +42,9 @@ class MimoBillingContextTest extends TestCase
 
     public function test_system_api_config_keeps_billing_context(): void
     {
-        Http::fake([
-            'https://system.example.com/chat/completions' => Http::response([
-                'choices' => [[
-                    'message' => [
-                        'audio' => [
-                            'data' => base64_encode('audio'),
-                        ],
-                    ],
-                ]],
-            ]),
-        ]);
+        $this->fakeMimoResponse('https://system.example.com/chat/completions');
 
-        $user = User::factory()->create();
+        $user = User::factory()->create(['quota_balance' => 10]);
         app(MimoConfigService::class)->setSystemConfig('system-key', 'https://system.example.com');
 
         $this->actingAs($user)
@@ -78,5 +59,24 @@ class MimoBillingContextTest extends TestCase
         $payload = AudioJob::query()->firstOrFail()->request_payload;
         $this->assertSame('system', $payload['_meta']['api_config_source']);
         $this->assertTrue($payload['_meta']['billable']);
+    }
+
+    private function fakeMimoResponse(string $url): void
+    {
+        $http = new HttpFactory();
+        $http->fake([
+            $url => Http::response([
+                'choices' => [[
+                    'message' => [
+                        'audio' => [
+                            'data' => base64_encode('audio'),
+                            'format' => 'wav',
+                        ],
+                    ],
+                ]],
+            ]),
+        ]);
+
+        $this->app->instance(HttpFactory::class, $http);
     }
 }

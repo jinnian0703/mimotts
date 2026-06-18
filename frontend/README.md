@@ -1,6 +1,6 @@
-# Mimo Frontend
+# MimoTTS Frontend
 
-Next.js frontend for the Mimo audio operations console.
+Next.js frontend for the MimoTTS audio operations console.
 
 ## Commands
 

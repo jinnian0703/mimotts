@@ -5,7 +5,8 @@ param(
     [string] $Target = $env:MIMO_DEPLOY_TARGET,
     [string] $SiteName = $env:MIMO_DEPLOY_SITE_NAME,
     [string] $KeyPath = $env:MIMO_DEPLOY_KEY,
-    [switch] $SkipBuild
+    [switch] $SkipBuild,
+    [switch] $RunMigrations
 )
 
 $ErrorActionPreference = "Stop"
@@ -46,11 +47,13 @@ if (-not (Test-Path -LiteralPath $KeyPath)) {
 
 $remote = "$User@$HostName"
 $remoteZip = "/tmp/mimo-source-upload.zip"
+$runMigrationsValue = if ($RunMigrations -or $env:MIMO_DEPLOY_RUN_MIGRATIONS -eq "1") { "1" } else { "0" }
 $remoteScript = @"
 set -euo pipefail
 TARGET="$Target"
 SITE_NAME="$SiteName"
 ZIP="$remoteZip"
+RUN_MIGRATIONS="$runMigrationsValue"
 STAGING="/tmp/mimo-source-upload-`$SITE_NAME"
 BACKUP_DIR="/root/mimo-backups"
 STAMP=`$(date +%Y%m%d_%H%M%S)
@@ -72,6 +75,7 @@ rsync -a \
   --exclude='backend/.env' \
   --exclude='backend/storage/app/audio/uploads/***' \
   --exclude='backend/storage/app/audio/generated/***' \
+  --exclude='backend/storage/app/public/site-icons/***' \
   --exclude='backend/storage/logs/***' \
   --exclude='backend/storage/framework/cache/data/***' \
   --exclude='backend/storage/framework/sessions/***' \
@@ -83,6 +87,17 @@ find "`$TARGET/backend/storage" "`$TARGET/backend/bootstrap/cache" -type f -exec
 php -l "`$TARGET/api.php"
 php -l "`$TARGET/backend/app/Services/EmailTemplateService.php"
 php -l "`$TARGET/backend/app/Http/Controllers/InstallController.php"
+php -l "`$TARGET/backend/app/Http/Controllers/HealthController.php"
+php -l "`$TARGET/backend/app/Http/Controllers/UpdateController.php"
+php -l "`$TARGET/backend/app/Services/HealthCheckService.php"
+php -l "`$TARGET/backend/app/Services/UpdateService.php"
+if [ "`$RUN_MIGRATIONS" = "1" ]; then
+  (cd "`$TARGET/backend" && php artisan migrate --force)
+  echo "MIGRATIONS=ran"
+else
+  echo "MIGRATIONS=skipped"
+  echo "MIGRATIONS_HINT=run upload script with -RunMigrations after source changes that include database migrations"
+fi
 echo "BACKUP=`$BACKUP"
 echo "TARGET=`$TARGET"
 echo "DEPLOYED_AT=`$(date '+%Y-%m-%d %H:%M:%S')"

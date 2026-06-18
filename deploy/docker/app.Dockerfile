@@ -50,6 +50,14 @@ FROM php:7.4-apache
 
 WORKDIR /var/www/backend
 
+ARG APP_VERSION=dev
+ARG APP_BUILD_COMMIT=
+ARG APP_BUILD_TIME=
+ENV APP_VERSION=$APP_VERSION
+ENV APP_BUILD_COMMIT=$APP_BUILD_COMMIT
+ENV APP_BUILD_TIME=$APP_BUILD_TIME
+ENV MIMO_DEPLOYMENT_MODE=docker
+
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
       libicu-dev \
@@ -76,7 +84,9 @@ COPY deploy/docker/app-entrypoint.sh /usr/local/bin/mimo-app
 COPY deploy/docker/php.ini /usr/local/etc/php/conf.d/mimo.ini
 
 RUN chmod +x /usr/local/bin/mimo-app \
-    && mkdir -p storage/app/audio storage/framework/cache/data storage/framework/sessions storage/framework/views storage/logs bootstrap/cache \
+    && if [ -f scripts/source-upgrade.sh ]; then chmod +x scripts/source-upgrade.sh; fi \
+    && php -r 'file_put_contents("build.json", json_encode(["version" => getenv("APP_VERSION") ?: "dev", "commit" => getenv("APP_BUILD_COMMIT") ?: null, "built_at" => getenv("APP_BUILD_TIME") ?: null], JSON_UNESCAPED_SLASHES));' \
+    && mkdir -p storage/app/audio storage/app/public/site-icons storage/framework/cache/data storage/framework/sessions storage/framework/views storage/logs bootstrap/cache \
     && chown -R www-data:www-data storage bootstrap/cache
 
 EXPOSE 80
