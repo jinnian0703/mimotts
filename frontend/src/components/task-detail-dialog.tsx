@@ -94,8 +94,8 @@ export function TaskDetailDialog({
         </div>
 
         <div className="max-h-[calc(88vh-96px)] overflow-y-auto px-5 py-5">
-          <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
-            <div className="min-w-0 space-y-5">
+          <div className="space-y-5">
+            <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_320px]">
               <div className="grid gap-3 sm:grid-cols-3">
                 <SummaryMetric label="任务编号" value={task.id} />
                 <SummaryMetric label="进度" value={`${task.progress}%`} />
@@ -105,15 +105,14 @@ export function TaskDetailDialog({
                 />
               </div>
 
-              {canShowText && <TaskTextResult task={task} />}
-
-              <RequestSummaryPanel summary={requestSummary} />
-            </div>
-
-            <div className="space-y-4 lg:sticky lg:top-0 lg:self-start">
               <ResultPanel task={task} canPlay={canPlay} />
-              <MetadataPanel task={task} showUser={showUser} />
             </div>
+
+            {canShowText && <TaskTextResult task={task} />}
+
+            <RequestSummaryPanel summary={requestSummary} />
+
+            <MetadataPanel task={task} showUser={showUser} />
           </div>
         </div>
       </DialogContent>
@@ -331,66 +330,74 @@ function MetadataPanel({
 }) {
   return (
     <div className="rounded-lg border bg-background p-4">
-      <div className="mb-3 flex items-center gap-2 font-medium">
+      <div className="mb-4 flex items-center gap-2 font-medium">
         <IconListDetails className="size-4 text-primary" />
         任务信息
       </div>
-      <div className="grid gap-1">
-        <DetailItem label="模块" value={moduleLabels[task.module]} />
-        <DetailItem label="状态" value={statusLabels[task.status]} />
-        {showUser && (
-          <>
+
+      <div className="grid gap-5 lg:grid-cols-3">
+        <div className="min-w-0">
+          <div className="mb-2 text-sm font-medium text-muted-foreground">
+            任务
+          </div>
+          <div className="grid gap-1">
+            <DetailItem label="模块" value={moduleLabels[task.module]} />
+            <DetailItem label="状态" value={statusLabels[task.status]} />
+            {showUser && (
+              <>
+                <DetailItem
+                  label="用户"
+                  value={task.userName ?? task.userEmail ?? task.userId ?? "-"}
+                />
+                <DetailItem label="邮箱" value={task.userEmail ?? "-"} />
+              </>
+            )}
+            <DetailItem label="创建时间" value={task.createdAt ?? "-"} />
+            <DetailItem label="开始时间" value={task.startedAt ?? "-"} />
+            <DetailItem label="完成时间" value={task.completedAt ?? "-"} />
+          </div>
+        </div>
+
+        <div className="min-w-0">
+          <div className="mb-2 flex items-center gap-2 text-sm font-medium text-muted-foreground">
+            <IconFile className="size-4" />
+            文件
+          </div>
+          <div className="grid gap-1">
+            <DetailItem label="文件名称" value={task.fileName ?? "-"} />
+            <DetailItem label="文件类型" value={task.fileMimeType ?? "-"} />
             <DetailItem
-              label="用户"
-              value={task.userName ?? task.userEmail ?? task.userId ?? "-"}
+              label="文件大小"
+              value={
+                typeof task.fileSize === "number"
+                  ? formatFileSize(task.fileSize)
+                  : "-"
+              }
             />
-            <DetailItem label="邮箱" value={task.userEmail ?? "-"} />
-          </>
-        )}
-        <DetailItem label="创建时间" value={task.createdAt ?? "-"} />
-        <DetailItem label="开始时间" value={task.startedAt ?? "-"} />
-        <DetailItem label="完成时间" value={task.completedAt ?? "-"} />
-      </div>
+          </div>
+        </div>
 
-      <div className="mt-4 border-t pt-4">
-        <div className="mb-3 flex items-center gap-2 font-medium">
-          <IconFile className="size-4 text-primary" />
-          文件
-        </div>
-        <div className="grid gap-1">
-          <DetailItem label="文件名称" value={task.fileName ?? "-"} />
-          <DetailItem label="文件类型" value={task.fileMimeType ?? "-"} />
-          <DetailItem
-            label="文件大小"
-            value={
-              typeof task.fileSize === "number"
-                ? formatFileSize(task.fileSize)
-                : "-"
-            }
-          />
-        </div>
-      </div>
-
-      <div className="mt-4 border-t pt-4">
-        <div className="mb-3 flex items-center gap-2 font-medium">
-          <IconCreditCard className="size-4 text-primary" />
-          计费
-        </div>
-        <div className="grid gap-1">
-          <DetailItem
-            label="接口来源"
-            value={apiConfigSourceLabel(task.apiConfigSource)}
-          />
-          <DetailItem
-            label="计费状态"
-            value={billingStatusLabel(task.billable)}
-          />
-          <DetailItem
-            label="额度消耗"
-            value={
-              typeof task.quotaCost === "number" ? String(task.quotaCost) : "-"
-            }
-          />
+        <div className="min-w-0">
+          <div className="mb-2 flex items-center gap-2 text-sm font-medium text-muted-foreground">
+            <IconCreditCard className="size-4" />
+            计费
+          </div>
+          <div className="grid gap-1">
+            <DetailItem
+              label="接口来源"
+              value={apiConfigSourceLabel(task.apiConfigSource)}
+            />
+            <DetailItem
+              label="计费状态"
+              value={billingStatusLabel(task.billable)}
+            />
+            <DetailItem
+              label="额度消耗"
+              value={
+                typeof task.quotaCost === "number" ? String(task.quotaCost) : "-"
+              }
+            />
+          </div>
         </div>
       </div>
     </div>
