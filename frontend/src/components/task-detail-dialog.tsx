@@ -8,6 +8,7 @@ import {
   IconLoader2,
   IconCreditCard,
   IconFile,
+  IconFileText,
 } from "@tabler/icons-react"
 
 import { apiPath } from "@/lib/api"
@@ -51,6 +52,8 @@ const moduleOutputLabels: Record<AudioModule, string> = {
   "voice-clone": "下载验证音频",
 }
 
+const textOutputModules = new Set<AudioModule>(["speech-recognition"])
+
 export function TaskDetailDialog({
   task,
   showUser = false,
@@ -62,6 +65,10 @@ export function TaskDetailDialog({
     task.status === "completed" &&
     Boolean(task.outputUrl) &&
     audioOutputModules.has(task.module)
+  const canShowText =
+    task.status === "completed" &&
+    Boolean(task.outputUrl) &&
+    (textOutputModules.has(task.module) || isTextOutput(task))
   const requestSummary = normalizeRequestSummary(task.requestSummary)
 
   return (
@@ -98,6 +105,8 @@ export function TaskDetailDialog({
                 />
               </div>
 
+              {canShowText && <TaskTextResult task={task} />}
+
               <RequestSummaryPanel summary={requestSummary} />
             </div>
 
@@ -109,6 +118,97 @@ export function TaskDetailDialog({
         </div>
       </DialogContent>
     </Dialog>
+  )
+}
+
+function TaskTextResult({ task }: { task: AudioTask }) {
+  const [text, setText] = useState("")
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let active = true
+
+    async function loadText() {
+      if (!task.outputUrl) {
+        setLoading(false)
+        return
+      }
+
+      setLoading(true)
+      setError(null)
+
+      try {
+        const response = await fetch(apiPath(task.outputUrl), {
+          credentials: "include",
+          headers: {
+            Accept: "text/plain,*/*",
+          },
+        })
+
+        if (!response.ok) {
+          throw new Error(`文本加载失败：${response.status}`)
+        }
+
+        const body = await response.text()
+
+        if (active) {
+          setText(body.trim())
+        }
+      } catch (loadError) {
+        if (active) {
+          setError(
+            loadError instanceof Error ? loadError.message : "文本加载失败"
+          )
+        }
+      } finally {
+        if (active) {
+          setLoading(false)
+        }
+      }
+    }
+
+    void loadText()
+
+    return () => {
+      active = false
+    }
+  }, [task.outputUrl])
+
+  return (
+    <div className="rounded-lg border bg-muted/20 p-4">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 font-medium">
+          <IconFileText className="size-4 text-primary" />
+          {task.module === "speech-recognition" ? "识别文本" : "文本结果"}
+        </div>
+        <Badge variant="secondary">直接展示</Badge>
+      </div>
+
+      {loading && (
+        <div className="flex items-center gap-2 rounded-lg border bg-background p-4 text-sm text-muted-foreground">
+          <IconLoader2 className="size-4 animate-spin" />
+          文本加载中
+        </div>
+      )}
+
+      {!loading && error && (
+        <div className="flex items-start gap-2 rounded-lg border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive">
+          <IconAlertCircle className="mt-0.5 size-4 shrink-0" />
+          <span className="min-w-0 break-words">{error}</span>
+        </div>
+      )}
+
+      {!loading && !error && (
+        <div className="max-h-80 overflow-auto rounded-lg border bg-background p-4 text-sm leading-7">
+          {text ? (
+            <div className="whitespace-pre-wrap break-words">{text}</div>
+          ) : (
+            <div className="text-muted-foreground">暂无文本内容</div>
+          )}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -401,6 +501,13 @@ function formatSummaryValue(value: string | number | boolean | null | undefined)
   if (value === false) return "否"
   if (value === null || value === undefined) return ""
   return String(value).trim()
+}
+
+function isTextOutput(task: AudioTask) {
+  const mimeType = (task.fileMimeType ?? "").toLowerCase()
+  const fileName = (task.fileName ?? "").toLowerCase()
+
+  return mimeType.startsWith("text/") || fileName.endsWith(".txt")
 }
 
 function apiConfigSourceLabel(source: AudioTask["apiConfigSource"]) {
