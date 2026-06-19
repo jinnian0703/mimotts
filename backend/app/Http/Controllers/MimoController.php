@@ -17,17 +17,22 @@ use Illuminate\Support\Arr;
 
 class MimoController
 {
+    private const ASR_AUDIO_MAX_KILOBYTES = 7168;
+    private const ASR_AUDIO_MAX_MEGABYTES = 7;
+
     public function asr(
         Request $request,
         MimoClient $client,
         AudioStorageService $storage
     ): JsonResponse {
         $data = $request->validate([
-            'audio' => ['required', 'file', 'mimes:mp3,mp4,m4a,wav,webm,ogg,flac', 'max:51200'],
+            'audio' => ['required', 'file', 'mimes:mp3,mp4,m4a,wav,webm,ogg,flac', 'max:'.self::ASR_AUDIO_MAX_KILOBYTES],
             'title' => ['nullable', 'string', 'max:200'],
             'priority' => ['nullable', 'in:low,normal,high'],
             'prompt' => ['nullable', 'string', 'max:2000'],
             'language' => ['nullable', 'string', 'max:40'],
+        ], [
+            'audio.max' => '语音识别音频不能超过 '.self::ASR_AUDIO_MAX_MEGABYTES.' MB（Base64 编码后需小于 10 MB）。',
         ]);
 
         $job = $this->createJob($request, 'asr', 'mimo-v2.5-asr');

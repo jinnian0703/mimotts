@@ -43,6 +43,7 @@ import {
 } from "@/components/ui/empty"
 import {
   Field,
+  FieldDescription,
   FieldGroup,
   FieldLabel,
 } from "@/components/ui/field"
@@ -178,6 +179,10 @@ const textTagPresets = [
   { label: "放慢", value: "（语速变慢）" },
   { label: "重读", value: "（重读）" },
 ]
+
+const recognitionAudioMaxBytes = 7 * 1024 * 1024
+const recognitionAudioMaxLabel = "7 MB"
+const recognitionBase64MaxLabel = "10 MB"
 
 async function fetchWorkbenchState() {
   const [tasks, retention] = await Promise.all([
@@ -368,6 +373,12 @@ function AudioModuleForm({
 
     const formElement = event.currentTarget
     const form = new FormData(formElement)
+    const validationError = validateAudioForm(config.value, form)
+
+    if (validationError) {
+      toast.error(validationError)
+      return
+    }
 
     submittingRef.current = true
     setPending(true)
@@ -444,17 +455,31 @@ function AudioModuleForm({
 }
 
 function RecognitionFields({ acceptedFiles }: { acceptedFiles: string }) {
+  function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.currentTarget.files?.[0]
+
+    if (file && file.size > recognitionAudioMaxBytes) {
+      event.currentTarget.value = ""
+      toast.error(recognitionLimitMessage(file.size))
+    }
+  }
+
   return (
     <FieldGroup className="grid gap-5 md:grid-cols-2">
       <Field>
         <FieldLabel htmlFor="recognition-file">音频文件</FieldLabel>
-          <Input
+        <Input
           id="recognition-file"
           name="audio"
           type="file"
           accept={acceptedFiles}
+          onChange={handleFileChange}
           required
         />
+        <FieldDescription>
+          最大 {recognitionAudioMaxLabel}，Base64 编码后需小于{" "}
+          {recognitionBase64MaxLabel}。
+        </FieldDescription>
       </Field>
       <Field>
         <FieldLabel htmlFor="recognition-language">语言</FieldLabel>
@@ -940,4 +965,32 @@ function Metric({ label, value }: { label: string; value: number }) {
 
 function countByStatus(tasks: AudioTask[], status: AudioTask["status"]) {
   return tasks.filter((task) => task.status === status).length
+}
+
+function validateAudioForm(module: AudioModule, form: FormData) {
+  if (module !== "speech-recognition") {
+    return null
+  }
+
+  const audio = form.get("audio")
+
+  if (audio instanceof File && audio.size > recognitionAudioMaxBytes) {
+    return recognitionLimitMessage(audio.size)
+  }
+
+  return null
+}
+
+function recognitionLimitMessage(fileSize: number) {
+  return `语音识别文件不能超过 ${recognitionAudioMaxLabel}，当前约 ${formatFileSize(
+    fileSize
+  )}。`
+}
+
+function formatFileSize(bytes: number) {
+  if (bytes < 1024 * 1024) {
+    return `${Math.max(1, Math.round(bytes / 1024))} KB`
+  }
+
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }
