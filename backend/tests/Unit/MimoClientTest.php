@@ -40,6 +40,18 @@ class MimoClientTest extends TestCase
         $this->assertSame('(singing)月光落在窗前', $alreadyTaggedPayload['messages'][1]['content']);
     }
 
+    public function test_ignores_disabled_speech_rate(): void
+    {
+        $client = new MimoClient(new HttpFactory());
+
+        $payload = $client->buildTtsPayload('欢迎使用 MimoTTS', [
+            'style_prompt' => '自然清晰。',
+            'speech_rate' => 'off',
+        ]);
+
+        $this->assertSame('自然清晰。', $payload['messages'][0]['content']);
+    }
+
     public function test_builds_asr_payload_with_input_audio(): void
     {
         $client = new MimoClient(new HttpFactory());

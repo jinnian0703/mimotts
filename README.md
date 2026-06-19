@@ -72,6 +72,12 @@ cp .env.example .env
 docker compose up -d
 ```
 
+首次管理员账号会写入容器日志：
+
+```bash
+docker compose logs app | grep "管理员"
+```
+
 访问：
 
 ```text

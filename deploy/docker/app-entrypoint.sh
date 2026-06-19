@@ -44,6 +44,10 @@ if [ "${RUN_MIGRATIONS:-true}" = "true" ]; then
   php artisan migrate --force
 fi
 
+if [ "${MIMO_DOCKER_AUTO_INSTALL:-true}" = "true" ]; then
+  php artisan mimo:docker-install
+fi
+
 php artisan optimize:clear || true
 php artisan config:cache || true
 php artisan route:cache || true

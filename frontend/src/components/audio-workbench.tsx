@@ -126,6 +126,7 @@ const ttsVoices = [
 ]
 
 const speechRateOptions = [
+  { value: "off", label: "关闭" },
   { value: "x-slow", label: "很慢" },
   { value: "slow", label: "偏慢" },
   { value: "normal", label: "正常" },
@@ -805,7 +806,7 @@ function SpeechRateField({ id }: { id: string }) {
   return (
     <Field>
       <FieldLabel htmlFor={id}>语速</FieldLabel>
-      <Select name="speech_rate" defaultValue="normal">
+      <Select name="speech_rate" defaultValue="off">
         <SelectTrigger id={id} className="w-full">
           <SelectValue placeholder="选择语速" />
         </SelectTrigger>

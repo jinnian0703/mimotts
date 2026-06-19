@@ -65,7 +65,7 @@ class MimoController
             'style_prompt' => ['nullable', 'string', 'max:2000'],
             'voice' => ['nullable', 'string', 'max:200'],
             'response_format' => ['nullable', 'in:mp3,wav,ogg,flac,pcm16'],
-            'speech_rate' => ['nullable', 'in:x-slow,slow,normal,fast,x-fast'],
+            'speech_rate' => ['nullable', 'in:off,x-slow,slow,normal,fast,x-fast'],
             'delivery_mode' => ['nullable', 'in:speech,singing'],
         ]);
 
@@ -87,7 +87,7 @@ class MimoController
             'text' => ['required', 'string', 'max:10000'],
             'response_format' => ['nullable', 'in:mp3,wav,ogg,flac,pcm16'],
             'optimize_text_preview' => ['nullable', 'boolean'],
-            'speech_rate' => ['nullable', 'in:x-slow,slow,normal,fast,x-fast'],
+            'speech_rate' => ['nullable', 'in:off,x-slow,slow,normal,fast,x-fast'],
         ]);
 
         $job = $this->createJob($request, 'voice_design', 'mimo-v2.5-tts-voicedesign');
@@ -112,7 +112,7 @@ class MimoController
             'text' => ['required', 'string', 'max:10000'],
             'label' => ['nullable', 'string', 'max:200'],
             'response_format' => ['nullable', 'in:mp3,wav,ogg,flac,pcm16'],
-            'speech_rate' => ['nullable', 'in:x-slow,slow,normal,fast,x-fast'],
+            'speech_rate' => ['nullable', 'in:off,x-slow,slow,normal,fast,x-fast'],
         ]);
 
         $job = $this->createJob($request, 'voice_clone', 'mimo-v2.5-tts-voiceclone');
