@@ -25,6 +25,21 @@ class MimoClientTest extends TestCase
         $this->assertSame('wav', $payload['audio']['format']);
     }
 
+    public function test_builds_singing_tts_payload_with_style_prefix(): void
+    {
+        $client = new MimoClient(new HttpFactory());
+
+        $payload = $client->buildTtsPayload('月光落在窗前', [
+            'delivery_mode' => 'singing',
+        ]);
+        $alreadyTaggedPayload = $client->buildTtsPayload('(singing)月光落在窗前', [
+            'delivery_mode' => 'singing',
+        ]);
+
+        $this->assertSame('(唱歌)月光落在窗前', $payload['messages'][1]['content']);
+        $this->assertSame('(singing)月光落在窗前', $alreadyTaggedPayload['messages'][1]['content']);
+    }
+
     public function test_builds_asr_payload_with_input_audio(): void
     {
         $client = new MimoClient(new HttpFactory());

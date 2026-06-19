@@ -133,6 +133,11 @@ const speechRateOptions = [
   { value: "x-fast", label: "很快" },
 ]
 
+const deliveryModeOptions = [
+  { value: "speech", label: "朗读" },
+  { value: "singing", label: "唱歌" },
+]
+
 const stylePresets = [
   {
     value: "standard",
@@ -502,6 +507,7 @@ function RecognitionFields({ acceptedFiles }: { acceptedFiles: string }) {
 
 function SynthesisFields() {
   const [text, setText] = useState("")
+  const [deliveryMode, setDeliveryMode] = useState("speech")
   const [stylePreset, setStylePreset] = useState("custom")
   const [stylePrompt, setStylePrompt] = useState("")
   const textRef = useRef<HTMLTextAreaElement | null>(null)
@@ -514,6 +520,7 @@ function SynthesisFields() {
 
     function resetControlledFields() {
       setText("")
+      setDeliveryMode("speech")
       setStylePreset("custom")
       setStylePrompt("")
     }
@@ -582,7 +589,31 @@ function SynthesisFields() {
           ))}
         </div>
       </Field>
-      <FieldGroup className="grid gap-5 md:grid-cols-2 xl:grid-cols-5">
+      <FieldGroup className="grid gap-5 md:grid-cols-2 xl:grid-cols-6">
+        <Field>
+          <FieldLabel htmlFor="synthesis-delivery-mode">合成模式</FieldLabel>
+          <Select
+            name="delivery_mode"
+            value={deliveryMode}
+            onValueChange={setDeliveryMode}
+          >
+            <SelectTrigger id="synthesis-delivery-mode" className="w-full">
+              <SelectValue placeholder="选择模式" />
+            </SelectTrigger>
+            <SelectContent position="popper">
+              <SelectGroup>
+                {deliveryModeOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+          <FieldDescription>
+            唱歌会自动在文本开头加入官方标记。
+          </FieldDescription>
+        </Field>
         <Field>
           <FieldLabel htmlFor="synthesis-style-preset">
             自然语言预设

@@ -66,12 +66,13 @@ class MimoController
             'voice' => ['nullable', 'string', 'max:200'],
             'response_format' => ['nullable', 'in:mp3,wav,ogg,flac,pcm16'],
             'speech_rate' => ['nullable', 'in:x-slow,slow,normal,fast,x-fast'],
+            'delivery_mode' => ['nullable', 'in:speech,singing'],
         ]);
 
         $job = $this->createJob($request, 'tts', 'mimo-v2.5-tts');
-        $payload = $client->buildTtsPayload($data['text'], Arr::only($data, ['style_prompt', 'voice', 'response_format', 'speech_rate']));
+        $payload = $client->buildTtsPayload($data['text'], Arr::only($data, ['style_prompt', 'voice', 'response_format', 'speech_rate', 'delivery_mode']));
 
-        return $this->queue($request, $job, $payload, Arr::only($data, ['title', 'priority', 'text', 'style_prompt', 'voice', 'response_format', 'speech_rate']), null, 'mimo.tts');
+        return $this->queue($request, $job, $payload, Arr::only($data, ['title', 'priority', 'text', 'style_prompt', 'voice', 'response_format', 'speech_rate', 'delivery_mode']), null, 'mimo.tts');
     }
 
     public function voiceDesign(

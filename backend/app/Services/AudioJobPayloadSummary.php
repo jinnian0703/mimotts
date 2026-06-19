@@ -24,6 +24,7 @@ class AudioJobPayloadSummary
             case 'tts':
                 $this->appendSection($sections, '合成文本', $this->messageText($payload, 1));
                 $this->appendSection($sections, '风格指令', $this->messageText($payload, 0));
+                $this->appendOption($options, '合成模式', $this->deliveryModeLabel(Arr::get($payload, '_input.delivery_mode')));
                 $this->appendAudioOptions($options, $payload);
                 break;
             case 'voice_design':
@@ -67,6 +68,19 @@ class AudioJobPayloadSummary
         }
 
         $this->appendOption($options, '音色', $voice);
+    }
+
+    private function deliveryModeLabel(?string $mode): ?string
+    {
+        if ($mode === 'singing') {
+            return '唱歌';
+        }
+
+        if ($mode === 'speech') {
+            return '朗读';
+        }
+
+        return null;
     }
 
     private function appendSection(array &$sections, string $label, $value): void

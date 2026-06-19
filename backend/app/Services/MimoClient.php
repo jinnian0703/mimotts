@@ -72,6 +72,7 @@ class MimoClient
     public function buildTtsPayload(string $text, array $options = []): array
     {
         $format = $options['response_format'] ?? $options['format'] ?? 'wav';
+        $text = $this->textWithDeliveryMode($text, $options['delivery_mode'] ?? null);
         $stylePrompt = $this->stylePromptWithSpeechRate(
             $options['style_prompt'] ?? '专业、清晰、稳定的播报语气。',
             $options['speech_rate'] ?? null
@@ -94,6 +95,20 @@ class MimoClient
                 'voice' => $options['voice'] ?? null,
             ], fn ($value) => $value !== null && $value !== ''),
         ];
+    }
+
+    public function textWithDeliveryMode(string $text, ?string $deliveryMode): string
+    {
+        if ($deliveryMode !== 'singing') {
+            return $text;
+        }
+
+        $trimmedText = ltrim($text);
+        if (preg_match('/^\((唱歌|sing|singing)\)/iu', $trimmedText)) {
+            return $trimmedText;
+        }
+
+        return '(唱歌)'.$trimmedText;
     }
 
     public function buildVoiceDesignPayload(string $description, string $text, array $options = []): array

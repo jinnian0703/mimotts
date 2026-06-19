@@ -115,7 +115,7 @@ class AudioJobProcessor
             case 'tts':
                 return $this->client->buildTtsPayload(
                     (string) Arr::get($input, 'text', ''),
-                    Arr::only($input, ['style_prompt', 'voice', 'response_format', 'speech_rate'])
+                    Arr::only($input, ['style_prompt', 'voice', 'response_format', 'speech_rate', 'delivery_mode'])
                 );
             case 'voice_design':
                 return $this->client->buildVoiceDesignPayload(
