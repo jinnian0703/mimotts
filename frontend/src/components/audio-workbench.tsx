@@ -179,6 +179,15 @@ const textTagPresets = [
   { label: "重读", value: "（重读）" },
 ]
 
+async function fetchWorkbenchState() {
+  const [tasks, retention] = await Promise.all([
+    api.tasks(),
+    api.audioRetention().catch(() => null),
+  ])
+
+  return { tasks, retention }
+}
+
 export function AudioWorkbench() {
   const [tasks, setTasks] = useState<AudioTask[]>([])
   const [activeModule, setActiveModule] =
@@ -192,13 +201,10 @@ export function AudioWorkbench() {
     }
 
     try {
-      const [data, retentionConfig] = await Promise.all([
-        api.tasks(),
-        api.audioRetention().catch(() => null),
-      ])
-      setTasks(data)
-      if (retentionConfig) {
-        setRetention(retentionConfig)
+      const workbenchState = await fetchWorkbenchState()
+      setTasks(workbenchState.tasks)
+      if (workbenchState.retention) {
+        setRetention(workbenchState.retention)
       }
       if (notify) {
         toast.success("任务列表已更新")
@@ -213,8 +219,36 @@ export function AudioWorkbench() {
   }, [])
 
   useEffect(() => {
-    void refreshTasks(false)
-  }, [refreshTasks])
+    let active = true
+
+    async function loadInitialTasks() {
+      try {
+        const workbenchState = await fetchWorkbenchState()
+        if (!active) {
+          return
+        }
+
+        setTasks(workbenchState.tasks)
+        if (workbenchState.retention) {
+          setRetention(workbenchState.retention)
+        }
+      } catch (error) {
+        if (active) {
+          toast.error(error instanceof Error ? error.message : "任务列表获取失败")
+        }
+      } finally {
+        if (active) {
+          setLoading(false)
+        }
+      }
+    }
+
+    void loadInitialTasks()
+
+    return () => {
+      active = false
+    }
+  }, [])
 
   useEffect(() => {
     const hasActiveTasks = tasks.some((task) =>
