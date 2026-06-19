@@ -245,7 +245,27 @@ class UpdateService
             return false;
         }
 
+        $currentComparable = $this->comparableVersion($currentVersion);
+        $latestComparable = $this->comparableVersion($latestVersion);
+        if ($currentComparable !== null && $latestComparable !== null) {
+            return version_compare($currentComparable, $latestComparable, '<');
+        }
+
         return $currentVersion === '' || $currentVersion !== $latestVersion;
+    }
+
+    private function comparableVersion(string $version): ?string
+    {
+        $version = trim($version);
+        if ($version === '') {
+            return null;
+        }
+
+        if (preg_match('/^v?(\d+(?:\.\d+){1,3})(?:[-+].*)?$/i', $version, $matches) !== 1) {
+            return null;
+        }
+
+        return $matches[1];
     }
 
     private function deployment(): array
@@ -253,13 +273,38 @@ class UpdateService
         $mode = strtolower((string) env('MIMO_DEPLOYMENT_MODE', ''));
 
         if ($mode !== 'source' && $mode !== 'docker') {
-            $mode = is_file('/.dockerenv') ? 'docker' : 'source';
+            $mode = $this->detectDeploymentMode();
         }
 
         return [
             'mode' => $mode,
             'label' => $mode === 'docker' ? 'Docker 版' : '宝塔源码版',
         ];
+    }
+
+    private function detectDeploymentMode(): string
+    {
+        if ($this->canInspectRoot() && is_file('/.dockerenv')) {
+            return 'docker';
+        }
+
+        return 'source';
+    }
+
+    private function canInspectRoot(?string $openBasedir = null): bool
+    {
+        $openBasedir = $openBasedir ?? (string) ini_get('open_basedir');
+        if ($openBasedir === '') {
+            return true;
+        }
+
+        foreach (explode(PATH_SEPARATOR, $openBasedir) as $path) {
+            if (trim($path) === '/') {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function commands(string $mode, array $latest): array
