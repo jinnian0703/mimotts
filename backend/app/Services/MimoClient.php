@@ -31,15 +31,24 @@ class MimoClient
             ->post($baseUrl.'/chat/completions', $payload);
 
         if (! $response->successful()) {
-            $message = $response->json('error.message') ?: $response->json('message') ?: 'Mimo API 调用失败';
-            throw new RuntimeException($message);
+            $error = $response->json('error');
+            $message = $response->json('error.message') ?: $response->json('message');
+
+            if (! $message && is_string($error)) {
+                $message = $error;
+            }
+
+            throw new RuntimeException($message ?: 'Mimo API 调用失败');
         }
 
         return $response->json();
     }
 
-    public function buildAsrPayload(string $audioBase64, string $mimeType, ?string $prompt = null): array
+    public function buildAsrPayload(string $audioBase64, string $mimeType, ?string $prompt = null, ?string $language = null): array
     {
+        $mimeType = $this->normalizeAudioMimeType($mimeType);
+        $language = $this->normalizeAsrLanguage($language);
+
         return [
             'model' => 'mimo-v2.5-asr',
             'messages' => [[
@@ -55,7 +64,7 @@ class MimoClient
                 ])),
             ]],
             'asr_options' => [
-                'language' => 'auto',
+                'language' => $language,
             ],
         ];
     }
@@ -133,6 +142,59 @@ class MimoClient
                 'voice' => "data:{$mimeType};base64,{$audioBase64}",
             ],
         ];
+    }
+
+    public function normalizeAudioMimeType(?string $mimeType, ?string $filename = null): string
+    {
+        $extension = strtolower(pathinfo((string) $filename, PATHINFO_EXTENSION));
+        $byExtension = [
+            'mp3' => 'audio/mpeg',
+            'wav' => 'audio/wav',
+            'wave' => 'audio/wav',
+            'm4a' => 'audio/mp4',
+            'mp4' => 'video/mp4',
+            'webm' => 'audio/webm',
+            'ogg' => 'audio/ogg',
+            'oga' => 'audio/ogg',
+            'flac' => 'audio/flac',
+        ];
+
+        if ($extension !== '' && isset($byExtension[$extension])) {
+            return $byExtension[$extension];
+        }
+
+        $normalized = strtolower(trim((string) $mimeType));
+        $aliases = [
+            'audio/x-wav' => 'audio/wav',
+            'audio/wave' => 'audio/wav',
+            'audio/x-pn-wav' => 'audio/wav',
+            'audio/x-m4a' => 'audio/mp4',
+            'audio/mp3' => 'audio/mpeg',
+            'audio/x-mpeg' => 'audio/mpeg',
+            'application/ogg' => 'audio/ogg',
+            'application/octet-stream' => 'audio/mpeg',
+        ];
+
+        return $aliases[$normalized] ?? ($normalized ?: 'audio/mpeg');
+    }
+
+    private function normalizeAsrLanguage(?string $language): string
+    {
+        $language = strtolower(trim((string) $language));
+
+        if ($language === '' || $language === 'auto') {
+            return 'auto';
+        }
+
+        if (in_array($language, ['zh', 'zh-cn', 'zh_cn', 'cn'], true)) {
+            return 'zh';
+        }
+
+        if (in_array($language, ['en', 'en-us', 'en_us'], true)) {
+            return 'en';
+        }
+
+        return 'auto';
     }
 
     private function stylePromptWithSpeechRate(string $prompt, ?string $speechRate): string

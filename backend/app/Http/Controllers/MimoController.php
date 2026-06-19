@@ -2,38 +2,30 @@
 
 namespace App\Http\Controllers;
 
-use App\Exceptions\InsufficientQuotaException;
+use App\Jobs\ProcessAudioJob;
 use App\Models\AudioJob;
 use App\Models\AudioFile;
-use App\Models\QuotaLedgerEntry;
 use App\Services\AudioStorageService;
-use App\Services\AuditLogger;
 use App\Services\AudioJobPayloadSummary;
 use App\Services\AudioRetentionService;
-use App\Services\BillingConfigService;
+use App\Services\AuditLogger;
 use App\Services\MimoClient;
-use App\Services\MimoConfigService;
-use App\Services\QuotaService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Arr;
-use RuntimeException;
-use Throwable;
 
 class MimoController
 {
     public function asr(
         Request $request,
         MimoClient $client,
-        MimoConfigService $configs,
-        AudioStorageService $storage,
-        AuditLogger $audit,
-        BillingConfigService $billing,
-        QuotaService $quota
+        AudioStorageService $storage
     ): JsonResponse {
         $data = $request->validate([
             'audio' => ['required', 'file', 'mimes:mp3,mp4,m4a,wav,webm,ogg,flac', 'max:51200'],
+            'title' => ['nullable', 'string', 'max:200'],
+            'priority' => ['nullable', 'in:low,normal,high'],
             'prompt' => ['nullable', 'string', 'max:2000'],
             'language' => ['nullable', 'string', 'max:40'],
         ]);
@@ -41,12 +33,17 @@ class MimoController
         $job = $this->createJob($request, 'asr', 'mimo-v2.5-asr');
         $file = $storage->storeUpload($job, $data['audio'], 'source');
         $payload = $client->buildAsrPayload(
-            base64_encode(file_get_contents($data['audio']->getRealPath())),
-            $data['audio']->getMimeType() ?: 'audio/mpeg',
+            base64_encode((string) file_get_contents($data['audio']->getRealPath())),
+            $client->normalizeAudioMimeType($data['audio']->getMimeType() ?: null, $data['audio']->getClientOriginalName()),
             $data['prompt'] ?? null
         );
 
-        return $this->execute($request, $job, $payload, $configs, $client, $storage, $audit, $billing, $quota, 'mimo.asr', [
+        return $this->queue($request, $job, $payload, [
+            'title' => $data['title'] ?? null,
+            'priority' => $data['priority'] ?? null,
+            'prompt' => $data['prompt'] ?? null,
+            'language' => $data['language'] ?? null,
+        ], $file, 'mimo.asr', [
             'source_file_id' => $file->id,
         ]);
     }
@@ -54,13 +51,11 @@ class MimoController
     public function tts(
         Request $request,
         MimoClient $client,
-        MimoConfigService $configs,
-        AudioStorageService $storage,
-        AuditLogger $audit,
-        BillingConfigService $billing,
-        QuotaService $quota
+        AudioStorageService $storage
     ): JsonResponse {
         $data = $request->validate([
+            'title' => ['nullable', 'string', 'max:200'],
+            'priority' => ['nullable', 'in:low,normal,high'],
             'text' => ['required', 'string', 'max:10000'],
             'style_prompt' => ['nullable', 'string', 'max:2000'],
             'voice' => ['nullable', 'string', 'max:200'],
@@ -71,19 +66,17 @@ class MimoController
         $job = $this->createJob($request, 'tts', 'mimo-v2.5-tts');
         $payload = $client->buildTtsPayload($data['text'], Arr::only($data, ['style_prompt', 'voice', 'response_format', 'speech_rate']));
 
-        return $this->execute($request, $job, $payload, $configs, $client, $storage, $audit, $billing, $quota, 'mimo.tts');
+        return $this->queue($request, $job, $payload, Arr::only($data, ['title', 'priority', 'text', 'style_prompt', 'voice', 'response_format', 'speech_rate']), null, 'mimo.tts');
     }
 
     public function voiceDesign(
         Request $request,
         MimoClient $client,
-        MimoConfigService $configs,
-        AudioStorageService $storage,
-        AuditLogger $audit,
-        BillingConfigService $billing,
-        QuotaService $quota
+        AudioStorageService $storage
     ): JsonResponse {
         $data = $request->validate([
+            'title' => ['nullable', 'string', 'max:200'],
+            'priority' => ['nullable', 'in:low,normal,high'],
             'description' => ['required', 'string', 'max:4000'],
             'text' => ['required', 'string', 'max:10000'],
             'response_format' => ['nullable', 'in:mp3,wav,ogg,flac,pcm16'],
@@ -98,20 +91,18 @@ class MimoController
             Arr::only($data, ['response_format', 'optimize_text_preview', 'speech_rate'])
         );
 
-        return $this->execute($request, $job, $payload, $configs, $client, $storage, $audit, $billing, $quota, 'mimo.voice_design');
+        return $this->queue($request, $job, $payload, Arr::only($data, ['title', 'priority', 'description', 'text', 'response_format', 'optimize_text_preview', 'speech_rate']), null, 'mimo.voice_design');
     }
 
     public function voiceClone(
         Request $request,
         MimoClient $client,
-        MimoConfigService $configs,
-        AudioStorageService $storage,
-        AuditLogger $audit,
-        BillingConfigService $billing,
-        QuotaService $quota
+        AudioStorageService $storage
     ): JsonResponse {
         $data = $request->validate([
             'audio' => ['required', 'file', 'mimes:mp3,mp4,m4a,wav,webm,ogg,flac', 'max:51200'],
+            'title' => ['nullable', 'string', 'max:200'],
+            'priority' => ['nullable', 'in:low,normal,high'],
             'text' => ['required', 'string', 'max:10000'],
             'label' => ['nullable', 'string', 'max:200'],
             'response_format' => ['nullable', 'in:mp3,wav,ogg,flac,pcm16'],
@@ -121,14 +112,14 @@ class MimoController
         $job = $this->createJob($request, 'voice_clone', 'mimo-v2.5-tts-voiceclone');
         $file = $storage->storeUpload($job, $data['audio'], 'source');
         $payload = $client->buildVoiceClonePayload(
-            base64_encode(file_get_contents($data['audio']->getRealPath())),
-            $data['audio']->getMimeType() ?: 'audio/mpeg',
+            base64_encode((string) file_get_contents($data['audio']->getRealPath())),
+            $client->normalizeAudioMimeType($data['audio']->getMimeType() ?: null, $data['audio']->getClientOriginalName()),
             $data['text'],
             $data['label'] ?? null,
             Arr::only($data, ['response_format', 'speech_rate'])
         );
 
-        return $this->execute($request, $job, $payload, $configs, $client, $storage, $audit, $billing, $quota, 'mimo.voice_clone', [
+        return $this->queue($request, $job, $payload, Arr::only($data, ['title', 'priority', 'text', 'label', 'response_format', 'speech_rate']), $file, 'mimo.voice_clone', [
             'source_file_id' => $file->id,
         ]);
     }
@@ -271,119 +262,48 @@ class MimoController
             'user_id' => $request->user()->id,
             'type' => $type,
             'model' => $model,
-            'status' => 'running',
-            'started_at' => now(),
+            'status' => 'queued',
         ]);
     }
 
-    private function execute(
+    private function queue(
         Request $request,
         AudioJob $job,
         array $payload,
-        MimoConfigService $configs,
-        MimoClient $client,
-        AudioStorageService $storage,
-        AuditLogger $audit,
-        BillingConfigService $billing,
-        QuotaService $quota,
+        array $input,
+        ?AudioFile $sourceFile,
         string $auditAction,
         array $extra = []
     ): JsonResponse {
-        $consumeEntry = null;
+        $job->update([
+            'status' => 'queued',
+            'request_payload' => array_merge($this->redactedPayload($payload), [
+                '_input' => $input,
+                '_source_file_id' => $sourceFile ? $sourceFile->id : null,
+                '_audit' => [
+                    'action' => $auditAction,
+                    'ip_address' => $request->ip(),
+                    'user_agent' => $request->userAgent(),
+                    'extra' => $extra,
+                ],
+            ]),
+            'error_message' => null,
+            'started_at' => null,
+            'completed_at' => null,
+        ]);
 
-        try {
-            $effectiveConfig = $configs->effectiveConfigFor($request->user());
-            $billingContext = $this->billingContextFor($effectiveConfig, $billing, $quota, $job->type);
+        dispatch(new ProcessAudioJob($job->id))->afterResponse();
 
-            if ($billingContext['billable'] && $billingContext['quota_cost'] > 0) {
-                $consumeEntry = $quota->consumeForJob(
-                    $request->user(),
-                    $job,
-                    (int) $billingContext['quota_cost'],
-                    $job->type,
-                    '接口调用',
-                    [
-                        'model' => $job->model,
-                        'audit_action' => $auditAction,
-                    ]
-                );
-                $billingContext['quota_ledger_id'] = $consumeEntry ? (string) $consumeEntry->id : null;
-            }
-
-            $job->update([
-                'request_payload' => $this->requestPayloadForStorage($payload, $billingContext),
-            ]);
-
-            $response = $client->chatCompletions($effectiveConfig, $payload);
-            $generated = $storage->storeGeneratedFromResponse($job, $response, 'generated');
-
-            $job->update([
-                'status' => 'completed',
-                'response_payload' => $response,
-                'completed_at' => now(),
-            ]);
-            $audit->record($request, $auditAction, 'audio_job', $job->id, array_merge($extra, $billingContext));
-
-            return response()->json([
-                'job' => $this->serializeJob($job->fresh('files')),
-                'result' => $response,
-                'generated_file_id' => $generated ? $generated->id : null,
-            ]);
-        } catch (Throwable $e) {
-            if ($consumeEntry instanceof QuotaLedgerEntry) {
-                $quota->refundConsume($consumeEntry);
-            }
-
-            $job->update([
-                'status' => 'failed',
-                'error_message' => $e->getMessage(),
-                'completed_at' => now(),
-            ]);
-
-            if ($e instanceof InsufficientQuotaException) {
-                return response()->json([
-                    'error' => [
-                        'code' => 'InsufficientQuota',
-                        'message' => '可用额度不足',
-                        'required' => $e->required(),
-                        'balance' => $e->balance(),
-                    ],
-                ], 402);
-            }
-
-            throw $e instanceof RuntimeException ? $e : new RuntimeException('音频处理失败', 0, $e);
-        }
-    }
-
-    private function billingContextFor(array $effectiveConfig, BillingConfigService $billing, QuotaService $quota, string $module): array
-    {
-        $source = ($effectiveConfig['source'] ?? 'system') === 'user' ? 'user' : 'system';
-        $cost = $source === 'system' ? $quota->costFor($module, $billing->config()) : 0;
-
-        return [
-            'api_config_source' => $source,
-            'billable' => $source === 'system',
-            'quota_cost' => $cost,
-            'quota_ledger_id' => null,
-        ];
-    }
-
-    private function requestPayloadForStorage(array $payload, array $billingContext): array
-    {
-        return array_merge($this->redactedPayload($payload), [
-            '_meta' => [
-                'api_config_source' => $billingContext['api_config_source'],
-                'billable' => $billingContext['billable'],
-                'quota_cost' => $billingContext['quota_cost'],
-                'quota_ledger_id' => $billingContext['quota_ledger_id'] ?? null,
-            ],
+        return response()->json([
+            'job' => $this->serializeJob($job->fresh('files')),
+            'queued' => true,
         ]);
     }
 
     private function redactedPayload(array $payload): array
     {
         array_walk_recursive($payload, function (&$value, $key): void {
-            if ($key === 'data' && is_string($value) && strlen($value) > 120) {
+            if (($key === 'data' || $key === 'voice') && is_string($value) && strlen($value) > 120) {
                 $value = substr($value, 0, 40).'...'.substr($value, -20);
             }
         });
@@ -393,19 +313,23 @@ class MimoController
 
     private function serializeJob(AudioJob $job): array
     {
-        $file = $job->files->firstWhere('kind', 'generated') ?? $job->files->first();
-        $requestMeta = is_array($job->request_payload) ? ($job->request_payload['_meta'] ?? []) : [];
+        $generatedFile = $job->files->firstWhere('kind', 'generated');
+        $file = $generatedFile ?? $job->files->first();
+        $requestPayload = is_array($job->request_payload) ? $job->request_payload : [];
+        $requestMeta = $requestPayload['_meta'] ?? [];
+        $input = is_array($requestPayload['_input'] ?? null) ? $requestPayload['_input'] : [];
+        $title = trim((string) ($input['title'] ?? ''));
 
         return [
             'id' => (string) $job->id,
             'module' => $this->moduleForType($job->type),
-            'title' => $job->model,
+            'title' => $title !== '' ? $title : $job->model,
             'status' => $job->status,
             'progress' => $this->progressForStatus($job->status),
             'createdAt' => $this->formatTaskTime($job->created_at),
             'startedAt' => $this->formatTaskTime($job->started_at),
             'completedAt' => $this->formatTaskTime($job->completed_at),
-            'outputUrl' => $file ? '/mimo/files/'.$file->id : null,
+            'outputUrl' => $generatedFile ? '/mimo/files/'.$generatedFile->id : null,
             'summary' => $job->error_message ?: ($job->status === 'completed' ? '处理完成' : '等待处理'),
             'errorMessage' => $job->error_message,
             'requestSummary' => app(AudioJobPayloadSummary::class)->forJob($job),

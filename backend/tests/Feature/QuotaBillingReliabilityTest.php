@@ -2,10 +2,12 @@
 
 namespace Tests\Feature;
 
+use App\Models\AudioJob;
 use App\Models\BillingOrder;
 use App\Models\QuotaLedgerEntry;
 use App\Models\SystemSetting;
 use App\Models\User;
+use App\Services\AudioJobProcessor;
 use App\Services\BillingConfigService;
 use App\Services\MimoConfigService;
 use App\Services\QuotaService;
@@ -143,7 +145,11 @@ class QuotaBillingReliabilityTest extends TestCase
                 'text' => '测试文本',
                 'response_format' => 'wav',
             ])
-            ->assertStatus(500);
+            ->assertOk()
+            ->assertJsonPath('queued', true)
+            ->assertJsonPath('job.status', 'queued');
+
+        app(AudioJobProcessor::class)->process(AudioJob::query()->firstOrFail());
 
         $this->assertSame(5, (int) $user->fresh()->quota_balance);
         $this->assertSame(-2, (int) QuotaLedgerEntry::where('type', QuotaService::TYPE_CONSUME)->firstOrFail()->amount);

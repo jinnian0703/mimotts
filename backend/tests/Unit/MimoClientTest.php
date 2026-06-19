@@ -56,6 +56,15 @@ class MimoClientTest extends TestCase
         $this->assertSame('data:audio/mpeg;base64,YWJj', $clone['audio']['voice']);
     }
 
+    public function test_normalizes_audio_mime_types_for_uploads(): void
+    {
+        $client = new MimoClient(new HttpFactory());
+
+        $this->assertSame('audio/wav', $client->normalizeAudioMimeType('audio/x-wav'));
+        $this->assertSame('audio/wav', $client->normalizeAudioMimeType('application/octet-stream', 'sample.wav'));
+        $this->assertSame('audio/mpeg', $client->normalizeAudioMimeType('audio/mp3'));
+    }
+
     public function test_chat_completion_uses_mimo_endpoint_and_api_key_header(): void
     {
         $http = new HttpFactory();

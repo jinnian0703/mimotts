@@ -35,17 +35,27 @@ class AudioStorageService
     public function storeGeneratedFromResponse(AudioJob $job, array $response, string $kind): ?AudioFile
     {
         $audio = $this->extractAudio($response);
-        if (! $audio) {
+        if ($audio) {
+            $format = $audio['format'] ?: 'mp3';
+            $bytes = base64_decode($audio['data'], true);
+            if ($bytes === false) {
+                return null;
+            }
+
+            return $this->storeGeneratedBytes($job, $kind, $bytes, $format, $this->mimeFromFormat($format));
+        }
+
+        $transcript = $this->extractTranscript($response);
+        if ($transcript === null) {
             return null;
         }
 
-        $format = $audio['format'] ?: 'mp3';
-        $bytes = base64_decode($audio['data'], true);
-        if ($bytes === false) {
-            return null;
-        }
+        return $this->storeGeneratedBytes($job, $kind, $transcript, 'txt', 'text/plain; charset=utf-8');
+    }
 
-        $path = 'generated/'.$job->user_id.'/'.$job->id.'/'.Str::uuid().'.'.$format;
+    private function storeGeneratedBytes(AudioJob $job, string $kind, string $bytes, string $extension, string $mimeType): AudioFile
+    {
+        $path = 'generated/'.$job->user_id.'/'.$job->id.'/'.Str::uuid().'.'.$extension;
         Storage::disk('audio')->put($path, $bytes);
 
         return AudioFile::create([
@@ -54,11 +64,47 @@ class AudioStorageService
             'kind' => $kind,
             'disk' => 'audio',
             'path' => $path,
-            'mime_type' => $this->mimeFromFormat($format),
+            'mime_type' => $mimeType,
             'size' => strlen($bytes),
             'sha256' => hash('sha256', $bytes),
             'metadata' => ['source' => 'mimo_response'],
         ]);
+    }
+
+    private function extractTranscript(array $response): ?string
+    {
+        $candidates = [
+            Arr::get($response, 'text'),
+            Arr::get($response, 'data.text'),
+            Arr::get($response, 'transcript'),
+            Arr::get($response, 'data.transcript'),
+            Arr::get($response, 'choices.0.message.content'),
+            Arr::get($response, 'choices.0.message.content.0.text'),
+        ];
+
+        foreach ($candidates as $candidate) {
+            if (is_string($candidate) && trim($candidate) !== '') {
+                return $candidate;
+            }
+
+            if (is_array($candidate)) {
+                $parts = [];
+                foreach ($candidate as $item) {
+                    if (is_array($item) && isset($item['text']) && is_string($item['text'])) {
+                        $parts[] = $item['text'];
+                    } elseif (is_string($item)) {
+                        $parts[] = $item;
+                    }
+                }
+
+                $text = trim(implode("\n", array_filter($parts)));
+                if ($text !== '') {
+                    return $text;
+                }
+            }
+        }
+
+        return null;
     }
 
     private function extractAudio(array $response): ?array

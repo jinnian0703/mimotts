@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\AudioJob;
 use App\Models\User;
+use App\Services\AudioJobProcessor;
 use App\Services\MimoConfigService;
 use Illuminate\Http\Client\Factory as HttpFactory;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -32,10 +33,12 @@ class MimoBillingContextTest extends TestCase
                 'response_format' => 'wav',
             ])
             ->assertOk()
-            ->assertJsonPath('job.apiConfigSource', 'user')
-            ->assertJsonPath('job.billable', false);
+            ->assertJsonPath('queued', true)
+            ->assertJsonPath('job.status', 'queued');
 
-        $payload = AudioJob::query()->firstOrFail()->request_payload;
+        $job = AudioJob::query()->firstOrFail();
+        app(AudioJobProcessor::class)->process($job);
+        $payload = $job->fresh()->request_payload;
         $this->assertSame('user', $payload['_meta']['api_config_source']);
         $this->assertFalse($payload['_meta']['billable']);
     }
@@ -53,10 +56,12 @@ class MimoBillingContextTest extends TestCase
                 'response_format' => 'wav',
             ])
             ->assertOk()
-            ->assertJsonPath('job.apiConfigSource', 'system')
-            ->assertJsonPath('job.billable', true);
+            ->assertJsonPath('queued', true)
+            ->assertJsonPath('job.status', 'queued');
 
-        $payload = AudioJob::query()->firstOrFail()->request_payload;
+        $job = AudioJob::query()->firstOrFail();
+        app(AudioJobProcessor::class)->process($job);
+        $payload = $job->fresh()->request_payload;
         $this->assertSame('system', $payload['_meta']['api_config_source']);
         $this->assertTrue($payload['_meta']['billable']);
     }

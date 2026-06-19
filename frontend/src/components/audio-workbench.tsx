@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import {
   IconClipboardList,
   IconFileUpload,
@@ -186,8 +186,10 @@ export function AudioWorkbench() {
   const [loading, setLoading] = useState(true)
   const [retention, setRetention] = useState<AudioRetentionConfig | null>(null)
 
-  async function refreshTasks(notify = true) {
-    setLoading(true)
+  const refreshTasks = useCallback(async (notify = true, showLoading = true) => {
+    if (showLoading) {
+      setLoading(true)
+    }
 
     try {
       const [data, retentionConfig] = await Promise.all([
@@ -204,44 +206,36 @@ export function AudioWorkbench() {
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "任务列表获取失败")
     } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    let active = true
-
-    async function loadInitialTasks() {
-      try {
-        const [data, retentionConfig] = await Promise.all([
-          api.tasks(),
-          api.audioRetention().catch(() => null),
-        ])
-
-        if (active) {
-          setTasks(data)
-          setRetention(retentionConfig)
-        }
-      } catch (error) {
-        if (active) {
-          toast.error(error instanceof Error ? error.message : "任务列表获取失败")
-        }
-      } finally {
-        if (active) {
-          setLoading(false)
-        }
+      if (showLoading) {
+        setLoading(false)
       }
-    }
-
-    void loadInitialTasks()
-
-    return () => {
-      active = false
     }
   }, [])
 
+  useEffect(() => {
+    void refreshTasks(false)
+  }, [refreshTasks])
+
+  useEffect(() => {
+    const hasActiveTasks = tasks.some((task) =>
+      task.status === "queued" || task.status === "running"
+    )
+
+    if (!hasActiveTasks) {
+      return
+    }
+
+    const timer = window.setInterval(() => {
+      void refreshTasks(false, false)
+    }, 2500)
+
+    return () => {
+      window.clearInterval(timer)
+    }
+  }, [refreshTasks, tasks])
+
   function appendTask(task: AudioTask) {
-    setTasks((current) => [task, ...current])
+    setTasks((current) => [task, ...current.filter((item) => item.id !== task.id)])
   }
 
   return (
@@ -329,24 +323,29 @@ function AudioModuleForm({
   onSubmitted: (task: AudioTask) => void
 }) {
   const [pending, setPending] = useState(false)
+  const submittingRef = useRef(false)
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
+    if (submittingRef.current) {
+      return
+    }
+
     const formElement = event.currentTarget
     const form = new FormData(formElement)
 
+    submittingRef.current = true
     setPending(true)
 
     try {
       const task = await api.runAudioTask(config.value, form)
       onSubmitted(task)
-      toast.success("任务已提交")
-      formElement.reset()
-      formElement.dispatchEvent(new Event("mimo-form-reset", { bubbles: true }))
+      toast.success("任务已加入列表")
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "任务提交失败")
     } finally {
+      submittingRef.current = false
       setPending(false)
     }
   }
@@ -396,13 +395,13 @@ function AudioModuleForm({
             <IconFileUpload />
             任务结果写入文件索引。
           </div>
-          <Button type="submit" disabled={pending}>
+          <Button type="submit" aria-busy={pending}>
             {pending ? (
-              <IconLoader2 data-icon="inline-start" />
+              <IconLoader2 data-icon="inline-start" className="animate-spin" />
             ) : (
               <IconPlayerPlay data-icon="inline-start" />
             )}
-            运行
+            {pending ? "提交中" : "运行"}
           </Button>
         </div>
       </FieldGroup>
