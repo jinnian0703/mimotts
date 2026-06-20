@@ -19,6 +19,7 @@ class MimoController
 {
     private const ASR_AUDIO_MAX_KILOBYTES = 7168;
     private const ASR_AUDIO_MAX_MEGABYTES = 7;
+    private const TASK_TITLE_MAX_LENGTH = 20;
 
     public function asr(
         Request $request,
@@ -27,12 +28,13 @@ class MimoController
     ): JsonResponse {
         $data = $request->validate([
             'audio' => ['required', 'file', 'mimes:mp3,mp4,m4a,wav,webm,ogg,flac', 'max:'.self::ASR_AUDIO_MAX_KILOBYTES],
-            'title' => ['nullable', 'string', 'max:200'],
+            'title' => ['nullable', 'string', 'max:'.self::TASK_TITLE_MAX_LENGTH],
             'priority' => ['nullable', 'in:low,normal,high'],
             'prompt' => ['nullable', 'string', 'max:2000'],
             'language' => ['nullable', 'string', 'max:40'],
         ], [
             'audio.max' => '语音识别音频不能超过 '.self::ASR_AUDIO_MAX_MEGABYTES.' MB（Base64 编码后需小于 10 MB）。',
+            'title.max' => '任务名称最多 '.self::TASK_TITLE_MAX_LENGTH.' 个字。',
         ]);
 
         $job = $this->createJob($request, 'asr', 'mimo-v2.5-asr');
@@ -59,7 +61,7 @@ class MimoController
         AudioStorageService $storage
     ): JsonResponse {
         $data = $request->validate([
-            'title' => ['nullable', 'string', 'max:200'],
+            'title' => ['nullable', 'string', 'max:'.self::TASK_TITLE_MAX_LENGTH],
             'priority' => ['nullable', 'in:low,normal,high'],
             'text' => ['required', 'string', 'max:10000'],
             'style_prompt' => ['nullable', 'string', 'max:2000'],
@@ -67,7 +69,7 @@ class MimoController
             'response_format' => ['nullable', 'in:mp3,wav,ogg,flac,pcm16'],
             'speech_rate' => ['nullable', 'in:off,x-slow,slow,normal,fast,x-fast'],
             'delivery_mode' => ['nullable', 'in:speech,singing'],
-        ]);
+        ], $this->titleValidationMessages());
 
         $job = $this->createJob($request, 'tts', 'mimo-v2.5-tts');
         $payload = $client->buildTtsPayload($data['text'], Arr::only($data, ['style_prompt', 'voice', 'response_format', 'speech_rate', 'delivery_mode']));
@@ -81,14 +83,14 @@ class MimoController
         AudioStorageService $storage
     ): JsonResponse {
         $data = $request->validate([
-            'title' => ['nullable', 'string', 'max:200'],
+            'title' => ['nullable', 'string', 'max:'.self::TASK_TITLE_MAX_LENGTH],
             'priority' => ['nullable', 'in:low,normal,high'],
             'description' => ['required', 'string', 'max:4000'],
             'text' => ['required', 'string', 'max:10000'],
             'response_format' => ['nullable', 'in:mp3,wav,ogg,flac,pcm16'],
             'optimize_text_preview' => ['nullable', 'boolean'],
             'speech_rate' => ['nullable', 'in:off,x-slow,slow,normal,fast,x-fast'],
-        ]);
+        ], $this->titleValidationMessages());
 
         $job = $this->createJob($request, 'voice_design', 'mimo-v2.5-tts-voicedesign');
         $payload = $client->buildVoiceDesignPayload(
@@ -107,13 +109,13 @@ class MimoController
     ): JsonResponse {
         $data = $request->validate([
             'audio' => ['required', 'file', 'mimes:mp3,mp4,m4a,wav,webm,ogg,flac', 'max:51200'],
-            'title' => ['nullable', 'string', 'max:200'],
+            'title' => ['nullable', 'string', 'max:'.self::TASK_TITLE_MAX_LENGTH],
             'priority' => ['nullable', 'in:low,normal,high'],
             'text' => ['required', 'string', 'max:10000'],
             'label' => ['nullable', 'string', 'max:200'],
             'response_format' => ['nullable', 'in:mp3,wav,ogg,flac,pcm16'],
             'speech_rate' => ['nullable', 'in:off,x-slow,slow,normal,fast,x-fast'],
-        ]);
+        ], $this->titleValidationMessages());
 
         $job = $this->createJob($request, 'voice_clone', 'mimo-v2.5-tts-voiceclone');
         $file = $storage->storeUpload($job, $data['audio'], 'source');
@@ -270,6 +272,13 @@ class MimoController
             'model' => $model,
             'status' => 'queued',
         ]);
+    }
+
+    private function titleValidationMessages(): array
+    {
+        return [
+            'title.max' => '任务名称最多 '.self::TASK_TITLE_MAX_LENGTH.' 个字。',
+        ];
     }
 
     private function queue(

@@ -15,6 +15,7 @@ import { toast } from "sonner"
 import { api } from "@/lib/api"
 import type { AudioModule, AudioRetentionConfig, AudioTask } from "@/lib/types"
 import { StatusBadge } from "@/components/status-badge"
+import { TablePagination } from "@/components/table-pagination"
 import { TaskDetailDialog } from "@/components/task-detail-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -189,6 +190,8 @@ const textTagPresets = [
 const recognitionAudioMaxBytes = 7 * 1024 * 1024
 const recognitionAudioMaxLabel = "7 MB"
 const recognitionBase64MaxLabel = "10 MB"
+const taskTitleMaxLength = 20
+const defaultPageSize = 20
 
 async function fetchWorkbenchState() {
   const [tasks, retention] = await Promise.all([
@@ -410,9 +413,13 @@ function AudioModuleForm({
             <Input
               id={`${config.value}-title`}
               name="title"
+              maxLength={taskTitleMaxLength}
               placeholder="例如：6 月例会录音"
               required
             />
+            <FieldDescription>
+              最多 {taskTitleMaxLength} 个字。
+            </FieldDescription>
           </Field>
 
           <Field>
@@ -834,6 +841,14 @@ function TaskTable({
   onDeleted: (taskId: string) => void
 }) {
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(defaultPageSize)
+  const pageCount = Math.max(1, Math.ceil(tasks.length / pageSize))
+  const safePage = Math.min(page, pageCount)
+  const paginatedTasks = tasks.slice(
+    (safePage - 1) * pageSize,
+    safePage * pageSize
+  )
 
   async function deleteTask(task: AudioTask) {
     setDeletingId(task.id)
@@ -886,7 +901,7 @@ function TaskTable({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {tasks.map((task) => (
+              {paginatedTasks.map((task) => (
                 <TableRow key={task.id}>
                   <TableCell>
                     <div className="flex flex-col gap-1">
@@ -961,6 +976,18 @@ function TaskTable({
             </TableBody>
           </Table>
         </div>
+        <div className="mt-4">
+          <TablePagination
+            total={tasks.length}
+            page={safePage}
+            pageSize={pageSize}
+            onPageChange={setPage}
+            onPageSizeChange={(nextPageSize) => {
+              setPageSize(nextPageSize)
+              setPage(1)
+            }}
+          />
+        </div>
       </CardContent>
     </Card>
   )
@@ -1000,6 +1027,12 @@ function countByStatus(tasks: AudioTask[], status: AudioTask["status"]) {
 }
 
 function validateAudioForm(module: AudioModule, form: FormData) {
+  const title = String(form.get("title") ?? "").trim()
+
+  if (title.length > taskTitleMaxLength) {
+    return `任务名称最多 ${taskTitleMaxLength} 个字`
+  }
+
   if (module !== "speech-recognition") {
     return null
   }

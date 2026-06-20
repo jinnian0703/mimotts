@@ -7,12 +7,14 @@ import {
   IconLoader2,
   IconReceipt2,
   IconRefresh,
+  IconSearch,
   IconUsers,
 } from "@tabler/icons-react"
 import { toast } from "sonner"
 
 import { useCurrentUser } from "@/components/auth-gate"
 import { PageHeading } from "@/components/page-heading"
+import { TablePagination } from "@/components/table-pagination"
 import { api } from "@/lib/api"
 import type { BillingConfig, User } from "@/lib/types"
 import { Badge } from "@/components/ui/badge"
@@ -72,6 +74,9 @@ type QuotaAdjustmentDraft = {
   reason: string
 }
 
+type FilterValue = "all"
+const defaultPageSize = 20
+
 export default function UsersPage() {
   const router = useRouter()
   const currentUser = useCurrentUser()
@@ -82,6 +87,17 @@ export default function UsersPage() {
   const [quotaAdjusting, setQuotaAdjusting] =
     useState<QuotaAdjustmentDraft | null>(null)
   const [bulkPlanId, setBulkPlanId] = useState("")
+  const [query, setQuery] = useState("")
+  const [roleFilter, setRoleFilter] = useState<FilterValue | "admin" | "user">("all")
+  const [statusFilter, setStatusFilter] =
+    useState<FilterValue | "active" | "suspended">("all")
+  const [planFilter, setPlanFilter] = useState("all")
+  const [emailFilter, setEmailFilter] =
+    useState<FilterValue | "verified" | "unverified">("all")
+  const [linuxDoFilter, setLinuxDoFilter] =
+    useState<FilterValue | "linked" | "unlinked">("all")
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(defaultPageSize)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const isAdmin = currentUser?.role === "admin"
@@ -109,6 +125,59 @@ export default function UsersPage() {
     }
   }, [isAdmin])
 
+  const filteredUsers = useMemo(() => {
+    const keyword = query.trim().toLowerCase()
+
+    return users.filter((user) => {
+      const planId = user.planId ?? ""
+      const searchable = [
+        user.id,
+        user.name,
+        user.email,
+        user.linuxdoId,
+        planId ? planNameById.get(planId) ?? planId : "",
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+
+      return (
+        (!keyword || searchable.includes(keyword)) &&
+        (roleFilter === "all" || user.role === roleFilter) &&
+        (statusFilter === "all" || (user.status ?? "active") === statusFilter) &&
+        (planFilter === "all" ||
+          (planFilter === "__none" ? !planId : planId === planFilter)) &&
+        (emailFilter === "all" ||
+          (emailFilter === "verified"
+            ? Boolean(user.emailVerifiedAt)
+            : !user.emailVerifiedAt)) &&
+        (linuxDoFilter === "all" ||
+          (linuxDoFilter === "linked"
+            ? Boolean(user.linuxdoId)
+            : !user.linuxdoId))
+      )
+    })
+  }, [
+    emailFilter,
+    linuxDoFilter,
+    planFilter,
+    planNameById,
+    query,
+    roleFilter,
+    statusFilter,
+    users,
+  ])
+
+  const pageCount = Math.max(1, Math.ceil(filteredUsers.length / pageSize))
+  const safePage = Math.min(page, pageCount)
+  const paginatedUsers = useMemo(
+    () => filteredUsers.slice((safePage - 1) * pageSize, safePage * pageSize),
+    [filteredUsers, pageSize, safePage]
+  )
+  const selectedVisibleIds = paginatedUsers
+    .filter((user) => selectedIds.includes(user.id))
+    .map((user) => user.id)
+
   async function refresh() {
     setLoading(true)
 
@@ -134,7 +203,13 @@ export default function UsersPage() {
   }
 
   function toggleAll(checked: boolean) {
-    setSelectedIds(checked ? users.map((user) => user.id) : [])
+    const visibleIds = paginatedUsers.map((user) => user.id)
+
+    setSelectedIds((current) =>
+      checked
+        ? [...new Set([...current, ...visibleIds])]
+        : current.filter((id) => !visibleIds.includes(id))
+    )
   }
 
   function openEdit(user: User) {
@@ -259,29 +334,116 @@ export default function UsersPage() {
 
       <Card>
         <CardHeader>
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <CardTitle>用户列表</CardTitle>
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                variant="outline"
-                onClick={() => bulk("activate")}
-                disabled={saving || selectedIds.length === 0}
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <CardTitle>用户列表</CardTitle>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <Badge variant="secondary">{users.length} 个用户</Badge>
+                  <Badge variant="outline">{filteredUsers.length} 个匹配</Badge>
+                  <Badge variant="outline">{selectedIds.length} 个已选</Badge>
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => bulk("activate")}
+                  disabled={saving || selectedIds.length === 0}
+                >
+                  启用
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => bulk("suspend")}
+                  disabled={saving || selectedIds.length === 0}
+                >
+                  暂停
+                </Button>
+                <Select value={bulkPlanId} onValueChange={setBulkPlanId}>
+                  <SelectTrigger className="w-36">
+                    <SelectValue placeholder="套餐" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      {(billing?.plans ?? []).map((plan) => (
+                        <SelectItem key={plan.id} value={plan.id}>
+                          {plan.name}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+                <Button
+                  onClick={() => bulk("set_plan")}
+                  disabled={saving || selectedIds.length === 0}
+                >
+                  分配套餐额度
+                </Button>
+              </div>
+            </div>
+            <div className="grid gap-2 xl:grid-cols-[minmax(220px,1fr)_120px_120px_150px_130px_140px]">
+              <div className="relative">
+                <IconSearch className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={query}
+                  onChange={(event) => {
+                    setQuery(event.target.value)
+                    setPage(1)
+                  }}
+                  placeholder="搜索名称、邮箱、套餐、LinuxDo"
+                  className="pl-8"
+                />
+              </div>
+              <Select
+                value={roleFilter}
+                onValueChange={(value) => {
+                  setRoleFilter(value as FilterValue | "admin" | "user")
+                  setPage(1)
+                }}
               >
-                启用
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => bulk("suspend")}
-                disabled={saving || selectedIds.length === 0}
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="角色" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value="all">全部角色</SelectItem>
+                    <SelectItem value="admin">管理员</SelectItem>
+                    <SelectItem value="user">用户</SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+              <Select
+                value={statusFilter}
+                onValueChange={(value) => {
+                  setStatusFilter(value as FilterValue | "active" | "suspended")
+                  setPage(1)
+                }}
               >
-                暂停
-              </Button>
-              <Select value={bulkPlanId} onValueChange={setBulkPlanId}>
-                <SelectTrigger className="w-36">
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="状态" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value="all">全部状态</SelectItem>
+                    <SelectItem value="active">启用</SelectItem>
+                    <SelectItem value="suspended">暂停</SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+              <Select
+                value={planFilter}
+                onValueChange={(value) => {
+                  setPlanFilter(value)
+                  setPage(1)
+                }}
+              >
+                <SelectTrigger className="w-full">
                   <SelectValue placeholder="套餐" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
+                    <SelectItem value="all">全部套餐</SelectItem>
+                    <SelectItem value="__none">无套餐</SelectItem>
                     {(billing?.plans ?? []).map((plan) => (
                       <SelectItem key={plan.id} value={plan.id}>
                         {plan.name}
@@ -290,17 +452,47 @@ export default function UsersPage() {
                   </SelectGroup>
                 </SelectContent>
               </Select>
-              <Button
-                onClick={() => bulk("set_plan")}
-                disabled={saving || selectedIds.length === 0}
+              <Select
+                value={emailFilter}
+                onValueChange={(value) => {
+                  setEmailFilter(value as FilterValue | "verified" | "unverified")
+                  setPage(1)
+                }}
               >
-                分配套餐额度
-              </Button>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="邮箱" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value="all">全部邮箱</SelectItem>
+                    <SelectItem value="verified">已验证</SelectItem>
+                    <SelectItem value="unverified">未验证</SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+              <Select
+                value={linuxDoFilter}
+                onValueChange={(value) => {
+                  setLinuxDoFilter(value as FilterValue | "linked" | "unlinked")
+                  setPage(1)
+                }}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="LinuxDo" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value="all">全部绑定</SelectItem>
+                    <SelectItem value="linked">已绑定</SelectItem>
+                    <SelectItem value="unlinked">未绑定</SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
             </div>
           </div>
         </CardHeader>
         <CardContent>
-          {users.length === 0 ? (
+          {filteredUsers.length === 0 ? (
             <Empty>
               <EmptyHeader>
                 <EmptyMedia variant="icon">
@@ -310,85 +502,102 @@ export default function UsersPage() {
               </EmptyHeader>
             </Empty>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>
-                    <Checkbox
-                      checked={
-                        users.length > 0 && selectedIds.length === users.length
-                      }
-                      onCheckedChange={(checked) => toggleAll(Boolean(checked))}
-                    />
-                  </TableHead>
-                  <TableHead>名称</TableHead>
-                  <TableHead>邮箱</TableHead>
-                  <TableHead>角色</TableHead>
-                  <TableHead>状态</TableHead>
-                  <TableHead>套餐</TableHead>
-                  <TableHead>额度</TableHead>
-                  <TableHead>邮箱验证</TableHead>
-                  <TableHead>LinuxDo</TableHead>
-                  <TableHead>最近登录</TableHead>
-                  <TableHead className="text-right">操作</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {users.map((user) => (
-                  <TableRow key={user.id}>
-                    <TableCell>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>
                       <Checkbox
-                        checked={selectedIds.includes(user.id)}
-                        onCheckedChange={(checked) =>
-                          toggleUser(user.id, Boolean(checked))
+                        checked={
+                          paginatedUsers.length > 0 &&
+                          selectedVisibleIds.length === paginatedUsers.length
                         }
+                        onCheckedChange={(checked) => toggleAll(Boolean(checked))}
                       />
-                    </TableCell>
-                    <TableCell className="font-medium">{user.name}</TableCell>
-                    <TableCell>{user.email ?? "-"}</TableCell>
-                    <TableCell>
-                      <Badge variant="secondary">
-                        {user.role === "admin" ? "管理员" : "用户"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant={
-                          user.status === "suspended"
-                            ? "destructive"
-                            : "secondary"
-                        }
-                      >
-                        {user.status === "suspended" ? "暂停" : "启用"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      {user.planId ? planNameById.get(user.planId) ?? user.planId : "-"}
-                    </TableCell>
-                    <TableCell>{user.quotaBalance ?? 0}</TableCell>
-                    <TableCell>{user.emailVerifiedAt ? "已验证" : "未验证"}</TableCell>
-                    <TableCell>{user.linuxdoId ? "已绑定" : "未绑定"}</TableCell>
-                    <TableCell>{user.lastLoginAt ?? "-"}</TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => openQuotaAdjustment(user)}
-                      >
-                        额度
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => openEdit(user)}
-                      >
-                        编辑
-                      </Button>
-                    </TableCell>
+                    </TableHead>
+                    <TableHead>名称</TableHead>
+                    <TableHead>邮箱</TableHead>
+                    <TableHead>角色</TableHead>
+                    <TableHead>状态</TableHead>
+                    <TableHead>套餐</TableHead>
+                    <TableHead>额度</TableHead>
+                    <TableHead>邮箱验证</TableHead>
+                    <TableHead>LinuxDo</TableHead>
+                    <TableHead>最近登录</TableHead>
+                    <TableHead className="text-right">操作</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {paginatedUsers.map((user) => (
+                    <TableRow key={user.id}>
+                      <TableCell>
+                        <Checkbox
+                          checked={selectedIds.includes(user.id)}
+                          onCheckedChange={(checked) =>
+                            toggleUser(user.id, Boolean(checked))
+                          }
+                        />
+                      </TableCell>
+                      <TableCell className="font-medium">{user.name}</TableCell>
+                      <TableCell>{user.email ?? "-"}</TableCell>
+                      <TableCell>
+                        <Badge variant="secondary">
+                          {user.role === "admin" ? "管理员" : "用户"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={
+                            user.status === "suspended"
+                              ? "destructive"
+                              : "secondary"
+                          }
+                        >
+                          {user.status === "suspended" ? "暂停" : "启用"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        {user.planId ? planNameById.get(user.planId) ?? user.planId : "-"}
+                      </TableCell>
+                      <TableCell>{user.quotaBalance ?? 0}</TableCell>
+                      <TableCell>{user.emailVerifiedAt ? "已验证" : "未验证"}</TableCell>
+                      <TableCell>{user.linuxdoId ? "已绑定" : "未绑定"}</TableCell>
+                      <TableCell>{user.lastLoginAt ?? "-"}</TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => openQuotaAdjustment(user)}
+                        >
+                          额度
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => openEdit(user)}
+                        >
+                          编辑
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+          {filteredUsers.length > 0 && (
+            <div className="mt-4">
+              <TablePagination
+                total={filteredUsers.length}
+                page={safePage}
+                pageSize={pageSize}
+                onPageChange={setPage}
+                onPageSizeChange={(nextPageSize) => {
+                  setPageSize(nextPageSize)
+                  setPage(1)
+                }}
+              />
+            </div>
           )}
         </CardContent>
       </Card>

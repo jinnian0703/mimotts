@@ -14,6 +14,7 @@ import { toast } from "sonner"
 import { useCurrentUser } from "@/components/auth-gate"
 import { PageHeading } from "@/components/page-heading"
 import { StatusBadge } from "@/components/status-badge"
+import { TablePagination } from "@/components/table-pagination"
 import { TaskDetailDialog } from "@/components/task-detail-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -76,6 +77,7 @@ const statusLabels: Record<TaskStatus, string> = {
 }
 
 type FilterValue = "all"
+const defaultPageSize = 20
 
 export default function TasksPage() {
   const router = useRouter()
@@ -90,6 +92,8 @@ export default function TasksPage() {
   const [loading, setLoading] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [bulkDeleting, setBulkDeleting] = useState(false)
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(defaultPageSize)
 
   useEffect(() => {
     if (currentUser && !isAdmin) {
@@ -143,7 +147,14 @@ export default function TasksPage() {
     })
   }, [moduleFilter, query, statusFilter, tasks, userFilter])
 
+  const pageCount = Math.max(1, Math.ceil(filteredTasks.length / pageSize))
+  const safePage = Math.min(page, pageCount)
+  const paginatedTasks = useMemo(
+    () => filteredTasks.slice((safePage - 1) * pageSize, safePage * pageSize),
+    [filteredTasks, pageSize, safePage]
+  )
   const selectedVisibleIds = filteredTasks
+    .filter((task) => paginatedTasks.some((item) => item.id === task.id))
     .filter((task) => selectedIds.includes(task.id))
     .map((task) => task.id)
 
@@ -168,7 +179,7 @@ export default function TasksPage() {
   }
 
   function toggleVisible(checked: boolean) {
-    const visibleIds = filteredTasks.map((task) => task.id)
+    const visibleIds = paginatedTasks.map((task) => task.id)
 
     setSelectedIds((current) =>
       checked
@@ -244,16 +255,20 @@ export default function TasksPage() {
                 <IconSearch className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   value={query}
-                  onChange={(event) => setQuery(event.target.value)}
+                  onChange={(event) => {
+                    setQuery(event.target.value)
+                    setPage(1)
+                  }}
                   placeholder="搜索任务、用户、摘要"
                   className="pl-8"
                 />
               </div>
               <Select
                 value={moduleFilter}
-                onValueChange={(value) =>
+                onValueChange={(value) => {
                   setModuleFilter(value as AudioModule | FilterValue)
-                }
+                  setPage(1)
+                }}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="模块" />
@@ -271,9 +286,10 @@ export default function TasksPage() {
               </Select>
               <Select
                 value={statusFilter}
-                onValueChange={(value) =>
+                onValueChange={(value) => {
                   setStatusFilter(value as TaskStatus | FilterValue)
-                }
+                  setPage(1)
+                }}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="状态" />
@@ -289,7 +305,13 @@ export default function TasksPage() {
                   </SelectGroup>
                 </SelectContent>
               </Select>
-              <Select value={userFilter} onValueChange={setUserFilter}>
+              <Select
+                value={userFilter}
+                onValueChange={(value) => {
+                  setUserFilter(value)
+                  setPage(1)
+                }}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="用户" />
                 </SelectTrigger>
@@ -365,7 +387,8 @@ export default function TasksPage() {
                       <Checkbox
                         checked={
                           filteredTasks.length > 0 &&
-                          selectedVisibleIds.length === filteredTasks.length
+                          paginatedTasks.length > 0 &&
+                          selectedVisibleIds.length === paginatedTasks.length
                         }
                         onCheckedChange={(checked) => toggleVisible(Boolean(checked))}
                       />
@@ -381,7 +404,7 @@ export default function TasksPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredTasks.map((task) => (
+                  {paginatedTasks.map((task) => (
                     <TableRow key={task.id}>
                       <TableCell>
                         <Checkbox
@@ -491,6 +514,18 @@ export default function TasksPage() {
                   ))}
                 </TableBody>
               </Table>
+              <div className="mt-4">
+                <TablePagination
+                  total={filteredTasks.length}
+                  page={safePage}
+                  pageSize={pageSize}
+                  onPageChange={setPage}
+                  onPageSizeChange={(nextPageSize) => {
+                    setPageSize(nextPageSize)
+                    setPage(1)
+                  }}
+                />
+              </div>
             </div>
           )}
         </CardContent>
