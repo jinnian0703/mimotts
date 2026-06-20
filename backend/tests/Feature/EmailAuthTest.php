@@ -236,9 +236,14 @@ class EmailAuthTest extends TestCase
             'id' => 'linuxdo-user-1',
             'username' => 'LinuxDo User',
             'email' => 'linuxdo@example.com',
+            'avatar_template' => '/user_avatar/linux.do/linuxdo-user-1/{size}/1.png',
         ]);
 
         $this->assertSame(123, (int) $syncedUser->quota_balance);
+        $this->assertSame(
+            'https://linux.do/user_avatar/linux.do/linuxdo-user-1/96/1.png',
+            $syncedUser->avatar_url
+        );
     }
 
     public function test_email_login_requires_valid_credentials(): void
@@ -418,6 +423,7 @@ class EmailAuthTest extends TestCase
         $oauth->shouldReceive('authorizationUrl')->once()->with(\Mockery::type('string'))->andReturn('https://connect.example.test/oauth');
         $oauth->shouldReceive('fetchUser')->once()->with('auth-code')->andReturn($profile);
         $oauth->shouldReceive('profileId')->once()->with($profile)->andReturn('linuxdo-bind-user');
+        $oauth->shouldReceive('profileAvatarUrl')->once()->with($profile)->andReturn('https://example.com/avatar.png');
         $this->app->instance(LinuxDoOAuthService::class, $oauth);
 
         $response = $this->actingAs($user)
@@ -443,6 +449,7 @@ class EmailAuthTest extends TestCase
         $this->assertDatabaseHas('users', [
             'id' => $user->id,
             'linuxdo_id' => 'linuxdo-bind-user',
+            'avatar_url' => 'https://example.com/avatar.png',
         ]);
     }
 

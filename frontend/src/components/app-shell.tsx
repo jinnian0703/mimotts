@@ -24,7 +24,7 @@ import {
 import { AnnouncementStack } from "@/components/announcement-stack"
 import { useCurrentUser } from "@/components/auth-gate"
 import { ThemeToggle } from "@/components/theme-toggle"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
@@ -101,34 +101,34 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   const initials = user?.name.slice(0, 2).toUpperCase() ?? "MI"
   const nav = user?.role === "admin" ? [...navItems, ...adminNavItems] : navItems
-  const sidebarOffset = desktopNavCollapsed ? "lg:pl-24" : "lg:pl-72"
+  const sidebarOffset = desktopNavCollapsed ? "lg:pl-24" : "lg:pl-80"
 
   return (
     <div className="min-h-dvh bg-background text-foreground">
       <aside
         className={cn(
           "fixed inset-y-0 left-0 hidden flex-col border-r bg-sidebar px-5 py-6 transition-[width] duration-200 lg:flex",
-          desktopNavCollapsed ? "w-24 px-4" : "w-72"
+          desktopNavCollapsed ? "w-24 px-4" : "w-80"
         )}
       >
         <div
           className={cn(
-            "flex items-center gap-2.5",
+            "flex items-center gap-2 overflow-visible",
             desktopNavCollapsed && "flex-col items-center"
           )}
         >
           <Link
             href="/dashboard"
             className={cn(
-              "flex min-w-0 items-center gap-3.5",
+              "flex shrink-0 items-center gap-3",
               desktopNavCollapsed && "justify-center"
             )}
             aria-label="MimoTTS"
           >
             <BrandIcon iconUrl={brand.iconUrl} />
             {!desktopNavCollapsed && (
-              <div className="min-w-0">
-                <span className="block truncate font-heading text-xl font-semibold">
+              <div className="shrink-0">
+                <span className="block whitespace-nowrap font-heading text-xl font-semibold">
                   {brand.name}
                 </span>
               </div>
@@ -247,6 +247,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <>
               <div className="flex items-center gap-3 px-2">
                 <Avatar className="size-11">
+                  {user?.avatarUrl && (
+                    <AvatarImage src={user.avatarUrl} alt={user.name} />
+                  )}
                   <AvatarFallback>{initials}</AvatarFallback>
                 </Avatar>
                 <div className="min-w-0 flex-1">

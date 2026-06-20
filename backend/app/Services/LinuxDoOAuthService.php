@@ -113,26 +113,29 @@ class LinuxDoOAuthService
 
         $email = Arr::get($profile, 'email');
         $email = is_string($email) && $email !== '' ? Str::lower($email) : null;
+        $avatarUrl = $this->profileAvatarUrl($profile);
 
         $billing = app(BillingConfigService::class);
         $defaultPlan = $billing->defaultPlan();
         $user = User::where('linuxdo_id', $linuxdoId)->first();
         $planId = $user ? $user->plan_id : ($defaultPlan['id'] ?? null);
 
-        $syncedUser = User::updateOrCreate(
-            ['linuxdo_id' => $linuxdoId],
-            [
-                'name' => Arr::get($profile, 'name')
-                    ?? Arr::get($profile, 'username')
-                    ?? 'LinuxDo 用户 '.Str::limit($linuxdoId, 8, ''),
-                'email' => $email,
-                'email_verified_at' => $email ? now() : null,
-                'avatar_url' => Arr::get($profile, 'picture') ?? Arr::get($profile, 'avatar_url'),
-                'status' => $user ? ($user->status ?: 'active') : 'active',
-                'plan_id' => $planId,
-                'last_login_at' => now(),
-            ]
-        );
+        $attributes = [
+            'name' => Arr::get($profile, 'name')
+                ?? Arr::get($profile, 'username')
+                ?? 'LinuxDo 用户 '.Str::limit($linuxdoId, 8, ''),
+            'email' => $email,
+            'email_verified_at' => $email ? now() : null,
+            'status' => $user ? ($user->status ?: 'active') : 'active',
+            'plan_id' => $planId,
+            'last_login_at' => now(),
+        ];
+
+        if ($avatarUrl !== null) {
+            $attributes['avatar_url'] = $avatarUrl;
+        }
+
+        $syncedUser = User::updateOrCreate(['linuxdo_id' => $linuxdoId], $attributes);
 
         if ($syncedUser->wasRecentlyCreated) {
             app(QuotaService::class)->grantDefaultPlan($syncedUser, $defaultPlan);
@@ -140,6 +143,31 @@ class LinuxDoOAuthService
         }
 
         return $syncedUser;
+    }
+
+    public function profileAvatarUrl(array $profile, int $size = 96): ?string
+    {
+        foreach (['picture', 'avatar_url', 'avatar', 'image', 'avatarTemplate', 'avatar_template'] as $key) {
+            $avatar = Arr::get($profile, $key);
+
+            if (! is_string($avatar) || trim($avatar) === '') {
+                continue;
+            }
+
+            $avatar = str_replace('{size}', (string) $size, trim($avatar));
+
+            if (Str::startsWith($avatar, '//')) {
+                $avatar = 'https:'.$avatar;
+            } elseif (Str::startsWith($avatar, '/')) {
+                $avatar = 'https://linux.do'.$avatar;
+            }
+
+            if (filter_var($avatar, FILTER_VALIDATE_URL)) {
+                return $avatar;
+            }
+        }
+
+        return null;
     }
 
     public function profileId(array $profile): string

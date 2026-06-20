@@ -129,10 +129,16 @@ class AuthController
                 : redirect()->away($frontendUrl.'/settings?linuxdo_bind=conflict');
         }
 
-        $user->forceFill([
+        $avatarUrl = $oauth->profileAvatarUrl($profile);
+        $attributes = [
             'linuxdo_id' => $linuxdoId,
-            'avatar_url' => $user->avatar_url ?: ($profile['picture'] ?? $profile['avatar_url'] ?? null),
-        ])->save();
+        ];
+
+        if ($avatarUrl !== null) {
+            $attributes['avatar_url'] = $avatarUrl;
+        }
+
+        $user->forceFill($attributes)->save();
 
         $audit->recordForUser($user, $request, 'account.linuxdo.link');
 
