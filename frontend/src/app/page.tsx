@@ -4,13 +4,13 @@ import Link from "next/link"
 import {
   IconArrowRight,
   IconBrandOauth,
-  IconClipboardList,
   IconCreditCard,
   IconGauge,
   IconSettings,
   IconWaveSine,
 } from "@tabler/icons-react"
 
+import { BrandMark } from "@/components/brand-mark"
 import { useCurrentUser } from "@/components/auth-gate"
 import { Button } from "@/components/ui/button"
 
@@ -48,7 +48,7 @@ export default function HomePage() {
       <header className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-5 py-6">
         <Link href="/" className="flex items-center gap-3">
           <span className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-            <IconClipboardList className="size-5" />
+            <BrandMark className="size-6" />
           </span>
           <span className="font-heading text-xl font-semibold">MimoTTS</span>
         </Link>

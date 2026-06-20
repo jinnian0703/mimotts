@@ -22,6 +22,7 @@ import {
 } from "@tabler/icons-react"
 
 import { AnnouncementStack } from "@/components/announcement-stack"
+import { BrandMark } from "@/components/brand-mark"
 import { useCurrentUser } from "@/components/auth-gate"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -30,6 +31,12 @@ import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { api } from "@/lib/api"
 import { clearSession } from "@/lib/session"
+import {
+  defaultSiteBrand,
+  normalizeSiteBrand,
+  readCachedSiteBrand,
+  writeCachedSiteBrand,
+} from "@/lib/site-brand"
 import { cn } from "@/lib/utils"
 
 const navItems = [
@@ -52,13 +59,22 @@ function normalizePathname(pathname: string) {
   return pathname === "/" ? pathname : pathname.replace(/\/+$/, "")
 }
 
+function getInitialBrandState() {
+  const cachedBrand = readCachedSiteBrand()
+
+  return {
+    brand: cachedBrand ?? defaultSiteBrand,
+    loaded: Boolean(cachedBrand),
+  }
+}
+
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
   const user = useCurrentUser()
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [desktopNavCollapsed, setDesktopNavCollapsed] = useState(false)
-  const [brand, setBrand] = useState({ name: "MimoTTS", iconUrl: "" })
+  const [{ brand, loaded: brandLoaded }, setBrandState] = useState(getInitialBrandState)
   const currentPath = normalizePathname(pathname)
   const isPublic =
     currentPath === "/" || currentPath === "/login" || currentPath === "/install"
@@ -77,12 +93,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           return
         }
 
-        setBrand({
-          name: config.system_name || config.site_title || "MimoTTS",
-          iconUrl: config.icon_url ?? config.iconUrl ?? "",
-        })
+        const nextBrand = normalizeSiteBrand(config)
+        setBrandState({ brand: nextBrand, loaded: true })
+        writeCachedSiteBrand(nextBrand)
       })
-      .catch(() => undefined)
+      .catch(() => {
+        if (!cancelled) {
+          setBrandState((current) =>
+            current.loaded ? current : { ...current, loaded: true }
+          )
+        }
+      })
 
     return () => {
       cancelled = true
@@ -125,7 +146,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             )}
             aria-label="MimoTTS"
           >
-            <BrandIcon iconUrl={brand.iconUrl} />
+            <BrandIcon iconUrl={brand.iconUrl} loaded={brandLoaded} />
             {!desktopNavCollapsed && (
               <div className="shrink-0">
                 <span className="block whitespace-nowrap font-heading text-xl font-semibold">
@@ -326,7 +347,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         >
           <div className="flex items-center justify-between gap-3 px-2">
             <div className="flex items-center gap-3">
-              <BrandIcon iconUrl={brand.iconUrl} />
+              <BrandIcon iconUrl={brand.iconUrl} loaded={brandLoaded} />
               <div className="flex flex-col">
                 <span className="font-heading text-xl font-semibold">
                   {brand.name}
@@ -414,7 +435,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   )
 }
 
-function BrandIcon({ iconUrl }: { iconUrl?: string | null }) {
+function BrandIcon({
+  iconUrl,
+  loaded,
+}: {
+  iconUrl?: string | null
+  loaded?: boolean
+}) {
   const [failedUrl, setFailedUrl] = useState<string | null>(null)
   const canRenderImage = Boolean(iconUrl) && failedUrl !== iconUrl
 
@@ -431,7 +458,7 @@ function BrandIcon({ iconUrl }: { iconUrl?: string | null }) {
           onError={() => setFailedUrl(iconUrl)}
         />
       ) : (
-        <IconClipboardList className="size-6" />
+        loaded ? <BrandMark className="size-7" /> : <span className="size-7" />
       )}
     </div>
   )

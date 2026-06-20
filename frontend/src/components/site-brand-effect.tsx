@@ -3,8 +3,7 @@
 import { useEffect } from "react"
 
 import { api } from "@/lib/api"
-
-const defaultTitle = "MimoTTS"
+import { normalizeSiteBrand, writeCachedSiteBrand } from "@/lib/site-brand"
 
 function ensureIconLink(rel: string) {
   const selector = `link[rel="${rel}"]`
@@ -43,11 +42,11 @@ export function SiteBrandEffect() {
           return
         }
 
-        const title = config.site_title || config.system_name || defaultTitle
-        const iconUrl = config.icon_url ?? config.iconUrl ?? ""
+        const brand = normalizeSiteBrand(config)
 
-        document.title = title
-        applySiteIcon(iconUrl)
+        document.title = brand.name
+        applySiteIcon(brand.iconUrl)
+        writeCachedSiteBrand(brand)
       })
       .catch(() => undefined)
 

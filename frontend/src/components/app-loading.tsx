@@ -1,13 +1,13 @@
 "use client"
 
-import { IconClipboardList } from "@tabler/icons-react"
+import { BrandMark } from "@/components/brand-mark"
 
 export function AppLoading() {
   return (
     <main className="grid min-h-dvh place-items-center bg-background px-6 text-foreground">
       <div className="flex w-full max-w-xs flex-col items-center gap-5">
-        <div className="relative flex size-12 items-center justify-center rounded-xl border border-border bg-card shadow-sm">
-          <IconClipboardList className="size-5 text-primary" />
+        <div className="relative flex size-12 items-center justify-center rounded-xl border border-primary/10 bg-primary text-primary-foreground shadow-sm">
+          <BrandMark className="size-7" />
           <span className="absolute -inset-1 rounded-2xl border border-primary/20 opacity-80 app-loading-ring" />
         </div>
         <div className="h-px w-full overflow-hidden rounded-full bg-border">
