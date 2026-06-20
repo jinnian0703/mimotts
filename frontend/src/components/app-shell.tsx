@@ -65,7 +65,7 @@ function getInitialBrandState() {
 
   return {
     brand: cachedBrand ?? defaultSiteBrand,
-    loaded: Boolean(cachedBrand?.iconUrl),
+    loaded: true,
   }
 }
 
@@ -480,6 +480,7 @@ function BrandIcon({
           alt=""
           width={44}
           height={44}
+          priority
           unoptimized
           className="max-h-11 max-w-11 object-contain"
           onError={() =>
