@@ -168,8 +168,7 @@ class InstallService
             'client_secret_configured' => ! empty($value['client_secret'] ?? config('services.linuxdo.client_secret')),
             'redirect_uri' => $value['redirect_uri'] ?? config('services.linuxdo.redirect_uri'),
             'configured' => ! empty($value['client_id'] ?? config('services.linuxdo.client_id'))
-                && ! empty($value['client_secret'] ?? config('services.linuxdo.client_secret'))
-                && ! empty($value['redirect_uri'] ?? config('services.linuxdo.redirect_uri')),
+                && ! empty($value['client_secret'] ?? config('services.linuxdo.client_secret')),
         ];
     }
 

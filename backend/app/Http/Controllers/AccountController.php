@@ -35,12 +35,16 @@ class AccountController
         }
 
         $state = Str::random(40);
+        $redirectUri = $oauth->redirectUriForRequest($request);
+        $frontendUrl = $oauth->frontendUrlForRequest($request);
         $request->session()->put('linuxdo_oauth_state', $state);
         $request->session()->put('linuxdo_oauth_mode', 'bind');
         $request->session()->put('linuxdo_oauth_user_id', $request->user()->id);
+        $request->session()->put('linuxdo_oauth_redirect_uri', $redirectUri);
+        $request->session()->put('linuxdo_oauth_frontend_url', $frontendUrl);
 
         return response()->json([
-            'authorize_url' => $oauth->authorizationUrl($state),
+            'authorize_url' => $oauth->authorizationUrl($state, $redirectUri),
         ]);
     }
 

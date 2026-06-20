@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\SystemSetting;
 use App\Models\User;
 use App\Services\AccountSecurityService;
 use App\Services\AuditLogger;
@@ -36,11 +35,15 @@ class AuthController
         }
 
         $state = Str::random(40);
+        $redirectUri = $oauth->redirectUriForRequest($request);
+        $frontendUrl = $oauth->frontendUrlForRequest($request);
         $request->session()->put('linuxdo_oauth_state', $state);
+        $request->session()->put('linuxdo_oauth_redirect_uri', $redirectUri);
+        $request->session()->put('linuxdo_oauth_frontend_url', $frontendUrl);
         $request->session()->forget(['linuxdo_oauth_mode', 'linuxdo_oauth_user_id']);
 
         return response()->json([
-            'authorize_url' => $oauth->authorizationUrl($state),
+            'authorize_url' => $oauth->authorizationUrl($state, $redirectUri),
         ]);
     }
 
@@ -55,9 +58,11 @@ class AuthController
             throw new RuntimeException('登录状态校验失败');
         }
 
-        $profile = $oauth->fetchUser($request->query('code'));
+        $redirectUri = $request->session()->pull('linuxdo_oauth_redirect_uri') ?: $oauth->redirectUriForRequest($request);
+        $frontendUrl = $request->session()->pull('linuxdo_oauth_frontend_url') ?: $oauth->frontendUrlForRequest($request);
+        $profile = $oauth->fetchUser($request->query('code'), $redirectUri);
         if ($request->session()->pull('linuxdo_oauth_mode') === 'bind') {
-            return $this->bindLinuxDo($request, $oauth, $audit, $profile);
+            return $this->bindLinuxDo($request, $oauth, $audit, $profile, $frontendUrl);
         }
 
         if (! $this->registrationEnabled($install) && ! $oauth->existingUser($profile)) {
@@ -84,7 +89,6 @@ class AuthController
         $request->session()->regenerate();
         $audit->recordForUser($user, $request, 'auth.login', ['provider' => 'linuxdo']);
 
-        $frontendUrl = $this->frontendUrl();
         if ($request->expectsJson()) {
             return response()->json(['user' => $user]);
         }
@@ -92,11 +96,10 @@ class AuthController
         return redirect()->away($frontendUrl.'/dashboard');
     }
 
-    private function bindLinuxDo(Request $request, LinuxDoOAuthService $oauth, AuditLogger $audit, array $profile)
+    private function bindLinuxDo(Request $request, LinuxDoOAuthService $oauth, AuditLogger $audit, array $profile, string $frontendUrl)
     {
         $userId = $request->session()->pull('linuxdo_oauth_user_id');
         $user = $request->user() ?: User::query()->find($userId);
-        $frontendUrl = $this->frontendUrl();
 
         if (! $user || (string) $user->id !== (string) $userId) {
             return $request->expectsJson()
@@ -439,19 +442,6 @@ class AuthController
         return array_key_exists('registration_enabled', $config)
             ? (bool) $config['registration_enabled']
             : true;
-    }
-
-    private function frontendUrl(): string
-    {
-        try {
-            $setting = SystemSetting::where('key', 'basic_info')->first();
-            $value = $setting ? $setting->decodedValue() : [];
-            $storedUrl = is_array($value) ? trim((string) ($value['frontend_url'] ?? '')) : '';
-        } catch (Throwable $e) {
-            $storedUrl = '';
-        }
-
-        return rtrim($storedUrl !== '' ? $storedUrl : config('app.frontend_url'), '/');
     }
 
     private function emailUserQuery(string $email)
