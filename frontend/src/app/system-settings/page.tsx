@@ -403,28 +403,14 @@ export default function SystemSettingsPage() {
   const iconInputRef = useRef<HTMLInputElement | null>(null)
   const isAdmin = user?.role === "admin"
 
-  const refresh = useCallback(async () => {
-    try {
-      const [
-        basicInfoConfig,
-        mimoConfig,
-        emailConfig,
-        billingConfig,
-        audioRetentionConfig,
-        systemSettings,
-        healthReport,
-        updateReport,
-      ] =
-        await Promise.all([
-          api.adminBasicInfo(),
-          api.adminMimoConfig(),
-          api.adminEmailAuthConfig(),
-          api.adminBillingConfig(),
-          api.adminAudioRetention(),
-          api.systemSettings(),
-          api.health(),
-          api.adminUpdateStatus().catch(() => null),
-        ])
+  const applyPrimaryConfig = useCallback(
+    (
+      basicInfoConfig: BasicInfoConfig,
+      mimoConfig: MimoConfig,
+      emailConfig: EmailAuthConfigState,
+      billingConfig: BillingConfig,
+      audioRetentionConfig: AudioRetentionConfig
+    ) => {
       setBasicInfo(mergeBasicInfo(basicInfoConfig))
       setMimo({ ...defaultMimo, ...mimoConfig, api_key: "" })
       setEmail(mergeEmailConfig(emailConfig))
@@ -435,13 +421,91 @@ export default function SystemSettingsPage() {
       setBilling(mergeBillingConfig(billingConfig))
       setAudioRetention(mergeAudioRetentionConfig(audioRetentionConfig))
       setPlans(normalizePlans(billingConfig.plans ?? []))
-      setSettings(systemSettings)
-      setHealth(healthReport)
-      setUpdateStatus(updateReport)
+    },
+    [user?.email]
+  )
+
+  const loadPrimaryConfig = useCallback(
+    async (options?: { isCancelled?: () => boolean }) => {
+      const [
+        basicInfoConfig,
+        mimoConfig,
+        emailConfig,
+        billingConfig,
+        audioRetentionConfig,
+      ] = await Promise.all([
+        api.adminBasicInfo(),
+        api.adminMimoConfig(),
+        api.adminEmailAuthConfig(),
+        api.adminBillingConfig(),
+        api.adminAudioRetention(),
+      ])
+
+      if (options?.isCancelled?.()) {
+        return false
+      }
+
+      applyPrimaryConfig(
+        basicInfoConfig,
+        mimoConfig,
+        emailConfig,
+        billingConfig,
+        audioRetentionConfig
+      )
+
+      return true
+    },
+    [applyPrimaryConfig]
+  )
+
+  const loadDeferredConfig = useCallback(
+    async (options?: { isCancelled?: () => boolean; showErrors?: boolean }) => {
+      const [systemSettingsResult, healthResult, updateResult] =
+        await Promise.allSettled([
+          api.systemSettings(),
+          api.health(),
+          api.adminUpdateStatus(),
+        ])
+
+      if (options?.isCancelled?.()) {
+        return
+      }
+
+      let failed = false
+
+      if (systemSettingsResult.status === "fulfilled") {
+        setSettings(systemSettingsResult.value)
+      } else {
+        failed = true
+      }
+
+      if (healthResult.status === "fulfilled") {
+        setHealth(healthResult.value)
+      } else {
+        failed = true
+      }
+
+      if (updateResult.status === "fulfilled") {
+        setUpdateStatus(updateResult.value)
+      } else {
+        failed = true
+      }
+
+      if (failed && options?.showErrors) {
+        toast.error("部分系统状态获取失败")
+      }
+    },
+    []
+  )
+
+  const refresh = useCallback(async () => {
+    try {
+      await loadPrimaryConfig()
+      void loadDeferredConfig({ showErrors: true })
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "系统设置获取失败")
     }
-  }, [user])
+  }, [loadDeferredConfig, loadPrimaryConfig])
 
   useEffect(() => {
     if (user && !isAdmin) {
@@ -455,44 +519,15 @@ export default function SystemSettingsPage() {
 
       void (async () => {
         try {
-          const [
-            basicInfoConfig,
-            mimoConfig,
-            emailConfig,
-            billingConfig,
-            audioRetentionConfig,
-            systemSettings,
-            healthReport,
-            updateReport,
-          ] =
-            await Promise.all([
-              api.adminBasicInfo(),
-              api.adminMimoConfig(),
-              api.adminEmailAuthConfig(),
-              api.adminBillingConfig(),
-              api.adminAudioRetention(),
-              api.systemSettings(),
-              api.health(),
-              api.adminUpdateStatus().catch(() => null),
-            ])
+          const loaded = await loadPrimaryConfig({
+            isCancelled: () => cancelled,
+          })
 
-          if (cancelled) {
+          if (!loaded || cancelled) {
             return
           }
 
-          setBasicInfo(mergeBasicInfo(basicInfoConfig))
-          setMimo({ ...defaultMimo, ...mimoConfig, api_key: "" })
-          setEmail(mergeEmailConfig(emailConfig))
-          setSmtpPassword("")
-          setMailApiToken("")
-          setLinuxDoSecret("")
-          setTestEmailTo(user?.email ?? "")
-          setBilling(mergeBillingConfig(billingConfig))
-          setAudioRetention(mergeAudioRetentionConfig(audioRetentionConfig))
-          setPlans(normalizePlans(billingConfig.plans ?? []))
-          setSettings(systemSettings)
-          setHealth(healthReport)
-          setUpdateStatus(updateReport)
+          void loadDeferredConfig({ isCancelled: () => cancelled })
         } catch (error) {
           if (!cancelled) {
             toast.error(error instanceof Error ? error.message : "系统设置获取失败")
@@ -504,7 +539,7 @@ export default function SystemSettingsPage() {
         cancelled = true
       }
     }
-  }, [isAdmin, user])
+  }, [isAdmin, loadDeferredConfig, loadPrimaryConfig])
 
   async function saveBasicInfo() {
     setSaving("basic")
