@@ -22,7 +22,6 @@ import {
 } from "@tabler/icons-react"
 
 import { AnnouncementStack } from "@/components/announcement-stack"
-import { BrandMark } from "@/components/brand-mark"
 import { useCurrentUser } from "@/components/auth-gate"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -33,8 +32,10 @@ import { api } from "@/lib/api"
 import { clearSession } from "@/lib/session"
 import {
   defaultSiteBrand,
+  fallbackSiteIconUrl,
   normalizeSiteBrand,
   readCachedSiteBrand,
+  resolveSiteIconUrl,
   writeCachedSiteBrand,
 } from "@/lib/site-brand"
 import { cn } from "@/lib/utils"
@@ -64,7 +65,7 @@ function getInitialBrandState() {
 
   return {
     brand: cachedBrand ?? defaultSiteBrand,
-    loaded: Boolean(cachedBrand),
+    loaded: Boolean(cachedBrand?.iconUrl),
   }
 }
 
@@ -435,6 +436,32 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   )
 }
 
+function resolveBrandImageUrl({
+  loaded,
+  iconUrl,
+  failedUrls,
+}: {
+  loaded?: boolean
+  iconUrl?: string | null
+  failedUrls: string[]
+}) {
+  if (!loaded) {
+    return ""
+  }
+
+  const primaryIconUrl = resolveSiteIconUrl(iconUrl)
+
+  if (!failedUrls.includes(primaryIconUrl)) {
+    return primaryIconUrl
+  }
+
+  if (primaryIconUrl !== fallbackSiteIconUrl && !failedUrls.includes(fallbackSiteIconUrl)) {
+    return fallbackSiteIconUrl
+  }
+
+  return ""
+}
+
 function BrandIcon({
   iconUrl,
   loaded,
@@ -442,23 +469,27 @@ function BrandIcon({
   iconUrl?: string | null
   loaded?: boolean
 }) {
-  const [failedUrl, setFailedUrl] = useState<string | null>(null)
-  const canRenderImage = Boolean(iconUrl) && failedUrl !== iconUrl
+  const [failedUrls, setFailedUrls] = useState<string[]>([])
+  const imageUrl = resolveBrandImageUrl({ loaded, iconUrl, failedUrls })
 
   return (
-    <div className="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-primary text-primary-foreground">
-      {canRenderImage && iconUrl ? (
+    <div className="flex size-11 shrink-0 items-center justify-center overflow-hidden">
+      {imageUrl ? (
         <Image
-          src={iconUrl}
+          src={imageUrl}
           alt=""
           width={44}
           height={44}
           unoptimized
-          className="size-full object-cover"
-          onError={() => setFailedUrl(iconUrl)}
+          className="max-h-11 max-w-11 object-contain"
+          onError={() =>
+            setFailedUrls((current) =>
+              current.includes(imageUrl) ? current : [...current, imageUrl]
+            )
+          }
         />
       ) : (
-        loaded ? <BrandMark className="size-7" /> : <span className="size-7" />
+        <span className={cn("block size-8 rounded-md", loaded && "bg-muted")} />
       )}
     </div>
   )

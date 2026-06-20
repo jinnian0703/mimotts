@@ -3,7 +3,11 @@
 import { useEffect } from "react"
 
 import { api } from "@/lib/api"
-import { normalizeSiteBrand, writeCachedSiteBrand } from "@/lib/site-brand"
+import {
+  normalizeSiteBrand,
+  resolveSiteIconUrl,
+  writeCachedSiteBrand,
+} from "@/lib/site-brand"
 
 function ensureIconLink(rel: string) {
   const selector = `link[rel="${rel}"]`
@@ -21,13 +25,10 @@ function ensureIconLink(rel: string) {
 }
 
 function applySiteIcon(iconUrl: string) {
-  if (!iconUrl) {
-    return
-  }
-
+  const resolvedIconUrl = resolveSiteIconUrl(iconUrl)
   for (const rel of ["icon", "shortcut icon", "apple-touch-icon"]) {
     const link = ensureIconLink(rel)
-    link.href = iconUrl
+    link.href = resolvedIconUrl
   }
 }
 

@@ -1,5 +1,7 @@
 import type { BasicInfoConfig } from "@/lib/types"
 
+export const fallbackSiteIconUrl = "/favicon.ico"
+
 export const defaultSiteBrand = {
   name: "MimoTTS",
   iconUrl: "",
@@ -9,10 +11,14 @@ const cacheKey = "mimotts:site-brand"
 
 export type SiteBrand = typeof defaultSiteBrand
 
+export function resolveSiteIconUrl(iconUrl?: string | null) {
+  return iconUrl?.trim() || fallbackSiteIconUrl
+}
+
 export function normalizeSiteBrand(config: BasicInfoConfig): SiteBrand {
   return {
     name: config.system_name || config.site_title || defaultSiteBrand.name,
-    iconUrl: config.icon_url ?? config.iconUrl ?? "",
+    iconUrl: (config.icon_url ?? config.iconUrl ?? "").trim(),
   }
 }
 
@@ -31,7 +37,7 @@ export function readCachedSiteBrand(): SiteBrand | null {
 
     return {
       name: parsed.name || defaultSiteBrand.name,
-      iconUrl: typeof parsed.iconUrl === "string" ? parsed.iconUrl : "",
+      iconUrl: typeof parsed.iconUrl === "string" ? parsed.iconUrl.trim() : "",
     }
   } catch {
     return null

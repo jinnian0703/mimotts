@@ -42,6 +42,7 @@ import { useCurrentUser } from "@/components/auth-gate"
 import { PageHeading } from "@/components/page-heading"
 import { formatChinaDateTime } from "@/lib/china-time"
 import { api } from "@/lib/api"
+import { resolveSiteIconUrl } from "@/lib/site-brand"
 import type {
   BasicInfoConfig,
   AudioRetentionConfig,
@@ -1096,8 +1097,8 @@ export default function SystemSettingsPage() {
                     />
                     <SummaryTile
                       label="站点图标"
-                      value={basicInfo.icon_url ? "已设置" : "默认图标"}
-                      description={basicInfo.icon_url || "跟随左上角默认图标"}
+                      value={basicInfo.icon_url ? "已设置" : "favicon.ico"}
+                      description={basicInfo.icon_url || "留空时展示 favicon.ico"}
                     />
                     <SummaryTile
                       label="站点地址"
@@ -1179,18 +1180,14 @@ export default function SystemSettingsPage() {
                       </FieldHelpLabel>
                       <div className="flex gap-3">
                         <div className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-primary text-primary-foreground">
-                          {basicInfo.icon_url ? (
-                            <Image
-                              src={basicInfo.icon_url}
-                              alt=""
-                              width={36}
-                              height={36}
-                              unoptimized
-                              className="size-full object-cover"
-                            />
-                          ) : (
-                            <IconMicrophone className="size-4" />
-                          )}
+                          <Image
+                            src={resolveSiteIconUrl(basicInfo.icon_url)}
+                            alt=""
+                            width={36}
+                            height={36}
+                            unoptimized
+                            className="size-full object-cover"
+                          />
                         </div>
                         <div className="flex min-w-0 flex-1 gap-2">
                           <Input
