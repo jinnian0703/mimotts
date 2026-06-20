@@ -102,14 +102,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   const initials = user?.name.slice(0, 2).toUpperCase() ?? "MI"
   const nav = user?.role === "admin" ? [...navItems, ...adminNavItems] : navItems
-  const sidebarOffset = desktopNavCollapsed ? "lg:pl-20" : "lg:pl-64"
+  const sidebarOffset = desktopNavCollapsed ? "lg:pl-24" : "lg:pl-72"
 
   return (
     <div className="min-h-dvh bg-background text-foreground">
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 hidden flex-col border-r bg-sidebar px-4 py-5 transition-[width] duration-200 lg:flex",
-          desktopNavCollapsed ? "w-20 px-3" : "w-64"
+          "fixed inset-y-0 left-0 hidden flex-col border-r bg-sidebar px-5 py-6 transition-[width] duration-200 lg:flex",
+          desktopNavCollapsed ? "w-24 px-4" : "w-72"
         )}
       >
         <div
@@ -121,7 +121,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <Link
             href="/dashboard"
             className={cn(
-              "flex min-w-0 items-center gap-3",
+              "flex min-w-0 items-center gap-3.5",
               desktopNavCollapsed && "justify-center"
             )}
             aria-label="MimoTTS"
@@ -129,7 +129,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <BrandIcon iconUrl={brand.iconUrl} />
             {!desktopNavCollapsed && (
               <div className="min-w-0">
-                <span className="font-heading text-lg font-semibold">
+                <span className="font-heading text-xl font-semibold">
                   {brand.name}
                 </span>
               </div>
@@ -145,7 +145,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <ThemeToggle
               compact
               tooltip={!desktopNavCollapsed}
-              className={desktopNavCollapsed ? "size-8" : undefined}
+              className={desktopNavCollapsed ? "size-9" : "size-8"}
               iconClassName={desktopNavCollapsed ? "size-5" : undefined}
             />
             {desktopNavCollapsed ? (
@@ -153,7 +153,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 asChild
                 variant="outline"
                 size="icon"
-                className="size-8"
+                className="size-9"
                 aria-label="打开 GitHub 仓库"
               >
                 <a
@@ -161,7 +161,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   target="_blank"
                   rel="noopener noreferrer"
                 >
-                  <IconBrandGithub className="size-4" />
+                  <IconBrandGithub className="size-5" />
                 </a>
               </Button>
             ) : (
@@ -170,7 +170,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   <Button
                     asChild
                     variant="outline"
-                    size="icon-xs"
+                    size="icon"
+                    className="size-8"
                     aria-label="打开 GitHub 仓库"
                   >
                     <a
@@ -178,7 +179,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                       target="_blank"
                       rel="noopener noreferrer"
                     >
-                      <IconBrandGithub />
+                      <IconBrandGithub className="size-4" />
                     </a>
                   </Button>
                 </TooltipTrigger>
@@ -189,22 +190,23 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <Button
                 variant="outline"
                 size="icon"
-                className="size-8"
+                className="size-9"
                 onClick={() => setDesktopNavCollapsed(false)}
                 aria-label="展开侧边栏"
               >
-                <IconChevronsRight className="size-4" />
+                <IconChevronsRight className="size-5" />
               </Button>
             ) : (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
                     variant="outline"
-                    size="icon-xs"
+                    size="icon"
+                    className="size-8"
                     onClick={() => setDesktopNavCollapsed(true)}
                     aria-label="收起侧边栏"
                   >
-                    <IconChevronsLeft />
+                    <IconChevronsLeft className="size-4" />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent side="right">收起侧边栏</TooltipContent>
@@ -213,7 +215,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </div>
 
-        <nav className={cn("flex flex-col gap-1", desktopNavCollapsed ? "mt-6" : "mt-8")}>
+        <nav className={cn("flex flex-col gap-2", desktopNavCollapsed ? "mt-7" : "mt-10")}>
           {nav.map((item) => {
             const Icon = item.icon
             const active = currentPath === item.href
@@ -225,10 +227,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   asChild
                   variant={active ? "secondary" : "ghost"}
                   size="icon"
-                  className={cn("mx-auto size-10", active && "font-medium")}
+                  className={cn("mx-auto size-11", active && "font-medium")}
                 >
                   <Link href={item.href} aria-label={item.label}>
-                    <Icon className="size-5" />
+                    <Icon className="size-[22px]" />
                   </Link>
                 </Button>
               )
@@ -239,10 +241,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 key={item.href}
                 asChild
                 variant={active ? "secondary" : "ghost"}
-                className={cn("justify-start", active && "font-medium")}
+                className={cn("h-10 justify-start gap-3 px-3 text-[15px]", active && "font-medium")}
               >
                 <Link href={item.href}>
-                  <Icon data-icon="inline-start" />
+                  <Icon data-icon="inline-start" className="size-5" />
                   {item.label}
                 </Link>
               </Button>
@@ -255,19 +257,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           {!desktopNavCollapsed ? (
             <>
               <div className="flex items-center gap-3 px-2">
-                <Avatar className="size-9">
+                <Avatar className="size-11">
                   <AvatarFallback>{initials}</AvatarFallback>
                 </Avatar>
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-medium">{user?.name ?? "未加载"}</div>
-                  <div className="text-xs text-muted-foreground">
+                  <div className="truncate text-[15px] font-medium">{user?.name ?? "未加载"}</div>
+                  <div className="text-sm text-muted-foreground">
                     {user?.role === "admin" ? "管理员" : "用户"}
                   </div>
                 </div>
                 {user?.role === "admin" && <Badge variant="secondary">Admin</Badge>}
               </div>
-              <Button variant="outline" onClick={handleLogout}>
-                <IconLogout data-icon="inline-start" />
+              <Button variant="outline" className="h-10 text-[15px]" onClick={handleLogout}>
+                <IconLogout data-icon="inline-start" className="size-5" />
                 退出
               </Button>
             </>
@@ -275,11 +277,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <Button
               variant="outline"
               size="icon"
-              className="size-9"
+              className="size-10"
               onClick={handleLogout}
               aria-label="退出"
             >
-              <IconLogout className="size-4" />
+              <IconLogout className="size-5" />
             </Button>
           )}
         </div>
@@ -326,7 +328,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <aside
           id="mobile-app-nav"
           className={cn(
-            "absolute inset-y-0 left-0 flex max-h-dvh w-[min(20rem,86vw)] flex-col overflow-hidden border-r bg-sidebar px-4 py-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] shadow-2xl transition-transform duration-200 ease-out",
+            "absolute inset-y-0 left-0 flex max-h-dvh w-[min(22rem,88vw)] flex-col overflow-hidden border-r bg-sidebar px-5 py-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))] shadow-2xl transition-transform duration-200 ease-out",
             mobileNavOpen ? "translate-x-0" : "-translate-x-full"
           )}
         >
@@ -334,7 +336,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <div className="flex items-center gap-3">
               <BrandIcon iconUrl={brand.iconUrl} />
               <div className="flex flex-col">
-                <span className="font-heading text-lg font-semibold">
+                <span className="font-heading text-xl font-semibold">
                   {brand.name}
                 </span>
               </div>
@@ -371,7 +373,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </div>
           </div>
 
-          <nav className="mt-8 flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto overscroll-contain pr-1">
+          <nav className="mt-10 flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto overscroll-contain pr-1">
             {navItems.map((item) => {
               const Icon = item.icon
               const active = currentPath === item.href
@@ -381,10 +383,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   key={item.href}
                   asChild
                   variant={active ? "secondary" : "ghost"}
-                  className={cn("justify-start", active && "font-medium")}
+                  className={cn("h-10 justify-start gap-3 px-3 text-[15px]", active && "font-medium")}
                 >
                   <Link href={item.href} onClick={() => setMobileNavOpen(false)}>
-                    <Icon data-icon="inline-start" />
+                    <Icon data-icon="inline-start" className="size-5" />
                     {item.label}
                   </Link>
                 </Button>
@@ -401,10 +403,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     key={item.href}
                     asChild
                     variant={active ? "secondary" : "ghost"}
-                    className={cn("justify-start", active && "font-medium")}
+                    className={cn("h-10 justify-start gap-3 px-3 text-[15px]", active && "font-medium")}
                   >
                     <Link href={item.href} onClick={() => setMobileNavOpen(false)}>
-                      <Icon data-icon="inline-start" />
+                      <Icon data-icon="inline-start" className="size-5" />
                       {item.label}
                     </Link>
                   </Button>
@@ -430,19 +432,19 @@ function BrandIcon({ iconUrl }: { iconUrl?: string | null }) {
   const canRenderImage = Boolean(iconUrl) && failedUrl !== iconUrl
 
   return (
-    <div className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-primary text-primary-foreground">
+    <div className="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-primary text-primary-foreground">
       {canRenderImage && iconUrl ? (
         <Image
           src={iconUrl}
           alt=""
-          width={36}
-          height={36}
+          width={44}
+          height={44}
           unoptimized
           className="size-full object-cover"
           onError={() => setFailedUrl(iconUrl)}
         />
       ) : (
-        <IconClipboardList className="size-5" />
+        <IconClipboardList className="size-6" />
       )}
     </div>
   )
