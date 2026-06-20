@@ -116,6 +116,41 @@ class QuotaBillingReliabilityTest extends TestCase
         $this->assertSame(2, QuotaLedgerEntry::where('type', QuotaService::TYPE_GRANT)->count());
     }
 
+    public function test_default_plan_can_be_disabled(): void
+    {
+        $this->saveBillingConfig([
+            'default_plan_id' => null,
+            'plans' => [
+                ['id' => 'starter', 'name' => '基础版', 'quota' => 100, 'base_amount' => 10, 'enabled' => true],
+            ],
+        ]);
+
+        $this->assertNull(app(BillingConfigService::class)->defaultPlan());
+    }
+
+    public function test_source_upload_checkout_uses_api_php_notify_url(): void
+    {
+        $user = User::factory()->create(['quota_balance' => 0]);
+        $this->saveBillingConfig([
+            'notify_url' => null,
+            'return_url' => null,
+            'plans' => [
+                ['id' => 'starter', 'name' => '基础版', 'quota' => 100, 'base_amount' => 10, 'enabled' => true],
+            ],
+        ]);
+
+        $this->actingAs($user)
+            ->withServerVariables([
+                'HTTP_HOST' => 'mimotts.example.com',
+                'HTTPS' => 'on',
+                'SCRIPT_NAME' => '/api.php',
+            ])
+            ->postJson('/api/billing/checkout', ['plan_id' => 'starter'])
+            ->assertOk()
+            ->assertJsonPath('checkout_params.notify_url', 'https://mimotts.example.com/api.php?r=/billing/notify')
+            ->assertJsonPath('checkout_params.return_url', 'https://mimotts.example.com/billing');
+    }
+
     public function test_paid_notify_is_idempotent_and_uses_order_snapshot_after_plan_changes(): void
     {
         $user = User::factory()->create(['quota_balance' => 0]);

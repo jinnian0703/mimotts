@@ -71,9 +71,14 @@ class BillingConfigService
         $plansHistory = is_array($current['plans_history'] ?? null) ? $current['plans_history'] : [];
         $quota = app(QuotaService::class);
         $planIds = array_map(fn (array $plan) => (string) $plan['id'], $plans);
-        $defaultPlanId = (string) ($data['default_plan_id'] ?? $current['default_plan_id']);
-        if (! in_array($defaultPlanId, $planIds, true)) {
-            $defaultPlanId = $planIds[0] ?? null;
+        $requestedDefaultPlanId = array_key_exists('default_plan_id', $data)
+            ? $data['default_plan_id']
+            : ($current['default_plan_id'] ?? null);
+        $defaultPlanId = $requestedDefaultPlanId === null || $requestedDefaultPlanId === ''
+            ? null
+            : (string) $requestedDefaultPlanId;
+        if ($defaultPlanId !== null && ! in_array($defaultPlanId, $planIds, true)) {
+            $defaultPlanId = null;
         }
 
         $creditMultiplier = max(0.01, (float) ($data['credit_multiplier'] ?? $current['credit_multiplier']));
@@ -125,13 +130,17 @@ class BillingConfigService
         $config = $this->config();
         $defaultPlanId = (string) ($config['default_plan_id'] ?? '');
 
+        if ($defaultPlanId === '') {
+            return null;
+        }
+
         foreach ($config['plans'] as $plan) {
             if ((string) ($plan['id'] ?? '') === $defaultPlanId) {
                 return $plan;
             }
         }
 
-        return $config['plans'][0] ?? null;
+        return null;
     }
 
     public function creditAmountForPlan(array $plan): string
@@ -149,7 +158,7 @@ class BillingConfigService
             'client_id' => '',
             'client_secret' => '',
             'credit_multiplier' => 1.0,
-            'default_plan_id' => 'starter',
+            'default_plan_id' => null,
             'notify_url' => null,
             'return_url' => null,
             'usage_costs' => [

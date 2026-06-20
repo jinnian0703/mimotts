@@ -48,8 +48,8 @@ class BillingController
         }
 
         $tradeNo = 'MIMO'.date('YmdHis').$request->user()->id.strtoupper(substr(bin2hex(random_bytes(4)), 0, 8));
-        $returnUrl = $config['return_url'] ?: rtrim(config('app.frontend_url'), '/').'/billing';
-        $notifyUrl = $config['notify_url'] ?: rtrim(config('app.url'), '/').'/api/billing/notify';
+        $returnUrl = $config['return_url'] ?: rtrim($this->baseUrl($request), '/').'/billing';
+        $notifyUrl = $config['notify_url'] ?: $this->apiUrl($request, '/billing/notify');
         $creditAmount = $billing->creditAmountForPlan($plan);
         $planSnapshot = $this->planSnapshot($plan, $config, $creditAmount);
 
@@ -282,5 +282,24 @@ class BillingController
         }
 
         return number_format((float) $received, 2, '.', '') === number_format((float) $expected, 2, '.', '');
+    }
+
+    private function baseUrl(Request $request): string
+    {
+        $scheme = $request->headers->get('x-forwarded-proto') ?: $request->getScheme();
+
+        return $scheme.'://'.$request->getHttpHost();
+    }
+
+    private function apiUrl(Request $request, string $path): string
+    {
+        $path = '/'.ltrim($path, '/');
+        $scriptName = (string) $request->server('SCRIPT_NAME', '');
+
+        if (basename($scriptName) === 'api.php') {
+            return rtrim($this->baseUrl($request), '/').'/api.php?r='.$path;
+        }
+
+        return rtrim($this->baseUrl($request), '/').'/api'.$path;
     }
 }

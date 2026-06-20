@@ -206,7 +206,7 @@ const defaultBilling: BillingConfig = {
   provider_name: "LinuxDo Credit",
   configured: false,
   credit_multiplier: 1,
-  default_plan_id: "starter",
+  default_plan_id: null,
   gateway_url: "https://credit.linux.do/epay",
   client_id: "",
   client_secret: "",
@@ -661,7 +661,7 @@ export default function SystemSettingsPage() {
         client_id: billing.client_id,
         client_secret: billing.client_secret || undefined,
         credit_multiplier: billing.credit_multiplier,
-        default_plan_id: billing.default_plan_id,
+        default_plan_id: billing.default_plan_id || null,
         notify_url: billing.notify_url,
         return_url: billing.return_url,
         usage_costs: billing.usage_costs,
@@ -2098,7 +2098,7 @@ export default function SystemSettingsPage() {
                     <SummaryTile
                       label="默认套餐"
                       value={defaultPlan?.name ?? "未设置"}
-                      description={billing.default_plan_id ?? "未指定"}
+                      description={billing.default_plan_id ?? "不自动分配"}
                     />
                     <SummaryTile
                       label="启用套餐"
@@ -2208,15 +2208,21 @@ export default function SystemSettingsPage() {
                     <Field>
                       <FieldHelpLabel
                         htmlFor="default-plan"
-                        requirement="required"
-                        help="新注册用户和首次 LinuxDo 登录用户会分配该套餐。"
+                        requirement="optional"
+                        help="新注册用户和首次 LinuxDo 登录用户会分配该套餐；选择无套餐则不自动发放额度。"
                       >
                         默认套餐
                       </FieldHelpLabel>
                       <Select
-                        value={billing.default_plan_id ?? ""}
+                        value={billing.default_plan_id ?? "__none"}
                         onValueChange={(default_plan_id) =>
-                          setBilling((current) => ({ ...current, default_plan_id }))
+                          setBilling((current) => ({
+                            ...current,
+                            default_plan_id:
+                              default_plan_id === "__none"
+                                ? null
+                                : default_plan_id,
+                          }))
                         }
                       >
                         <SelectTrigger id="default-plan" className="w-full">
@@ -2224,6 +2230,7 @@ export default function SystemSettingsPage() {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectGroup>
+                            <SelectItem value="__none">无套餐</SelectItem>
                             {plans.map((plan) => (
                               <SelectItem key={plan.id} value={plan.id}>
                                 {plan.name}

@@ -155,6 +155,16 @@ export default function InstallPage() {
     }
   }, [])
 
+  useEffect(() => {
+    const installed =
+      installStatus?.installed === true &&
+      (installStatus.administratorBound ?? installStatus.admin_bound ?? true)
+
+    if (!statusLoading && installed) {
+      router.replace("/login")
+    }
+  }, [installStatus, router, statusLoading])
+
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setPending(true)
