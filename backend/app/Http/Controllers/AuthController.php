@@ -89,7 +89,7 @@ class AuthController
             return response()->json(['user' => $user]);
         }
 
-        return redirect()->away($frontendUrl.'/');
+        return redirect()->away($frontendUrl.'/dashboard');
     }
 
     private function bindLinuxDo(Request $request, LinuxDoOAuthService $oauth, AuditLogger $audit, array $profile)

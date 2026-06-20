@@ -41,7 +41,7 @@ const capabilities = [
 
 export default function HomePage() {
   const user = useCurrentUser()
-  const entryHref = user ? "/dashboard" : "/login"
+  const entryHref = "/dashboard"
 
   return (
     <main className="min-h-dvh bg-background text-foreground">
@@ -54,7 +54,7 @@ export default function HomePage() {
         </Link>
         <Button asChild variant="outline">
           <Link href={entryHref}>
-            {user ? "进入仪表盘" : "登录"}
+            进入仪表盘
             <IconArrowRight data-icon="inline-end" />
           </Link>
         </Button>
@@ -75,12 +75,9 @@ export default function HomePage() {
           <div className="mt-9 flex flex-wrap gap-3">
             <Button asChild size="lg">
               <Link href={entryHref}>
-                {user ? "进入仪表盘" : "开始使用"}
+                进入仪表盘
                 <IconArrowRight data-icon="inline-end" />
               </Link>
-            </Button>
-            <Button asChild variant="outline" size="lg">
-              <Link href="/login">账户登录</Link>
             </Button>
           </div>
 
