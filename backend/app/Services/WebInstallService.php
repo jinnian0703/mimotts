@@ -78,14 +78,25 @@ class WebInstallService
             ]);
         }
 
+        SystemSetting::putPlain('basic_info', [
+            'system_name' => config('app.name', 'MimoTTS'),
+            'site_title' => config('app.name', 'MimoTTS'),
+            'site_subtitle' => null,
+            'icon_url' => null,
+            'app_url' => $data['app_url'],
+            'frontend_url' => $data['frontend_url'],
+            'icp_record' => null,
+            'footer_text' => null,
+            'support_email' => null,
+        ]);
+
         $emailConfig = $data['email_config'] ?? [];
-        $emailConfig['enabled'] = true;
         app(InstallService::class)->setEmailAuthConfig($emailConfig);
 
         SystemSetting::putPlain('installation', [
             'installed_at' => now()->toISOString(),
             'admin_user_id' => $admin->id,
-            'email_login_enabled' => true,
+            'email_login_enabled' => (bool) ($emailConfig['enabled'] ?? false),
             'linuxdo_configured' => ! empty($data['linuxdo_client_id']) && ! empty($data['linuxdo_client_secret']),
             'source' => 'web_installer',
         ]);

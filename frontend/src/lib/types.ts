@@ -52,6 +52,10 @@ export type InstallStatus = {
   email_configured?: boolean
   php_version?: string
   checks?: Record<string, boolean>
+  deployment?: {
+    mode?: "source" | "docker"
+    label?: string
+  }
 }
 
 export type BuildInfo = {
@@ -248,6 +252,42 @@ export type AudioModule =
   | "speech-synthesis"
   | "voice-design"
   | "voice-clone"
+
+export type DashboardTaskStats = {
+  total: number
+  queued: number
+  running: number
+  completed: number
+  failed: number
+  modules: Partial<Record<AudioModule, number>> & Record<string, number>
+}
+
+export type DashboardUserStats = {
+  total: number
+  active: number
+  suspended: number
+  verified: number
+  linuxdo_linked: number
+  linuxDoLinked?: number
+}
+
+export type DashboardSettingsStats = {
+  total: number
+}
+
+export type DashboardData = {
+  tasks: {
+    items: AudioTask[]
+    stats: DashboardTaskStats
+  }
+  billing: BillingConfig
+  users?: DashboardUserStats | null
+  mimo?: MimoConfig | null
+  email?: EmailAuthConfigState | null
+  settings?: DashboardSettingsStats | null
+  updated_at?: string
+  updatedAt?: string
+}
 
 export type AuditEvent = {
   id: string

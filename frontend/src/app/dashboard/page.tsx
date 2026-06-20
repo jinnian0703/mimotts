@@ -61,10 +61,12 @@ import type {
   AudioModule,
   AudioTask,
   BillingConfig,
+  DashboardData,
+  DashboardSettingsStats,
+  DashboardTaskStats,
+  DashboardUserStats,
   EmailAuthConfigState,
   MimoConfig,
-  SystemSetting,
-  User,
 } from "@/lib/types"
 
 const emptyBilling: BillingConfig = {
@@ -88,6 +90,28 @@ const emptyEmail: EmailAuthConfigState = {
   sender: {},
 }
 
+const emptyTaskStats: DashboardTaskStats = {
+  total: 0,
+  queued: 0,
+  running: 0,
+  completed: 0,
+  failed: 0,
+  modules: {},
+}
+
+const emptyUserStats: DashboardUserStats = {
+  total: 0,
+  active: 0,
+  suspended: 0,
+  verified: 0,
+  linuxdo_linked: 0,
+  linuxDoLinked: 0,
+}
+
+const emptySettingsStats: DashboardSettingsStats = {
+  total: 0,
+}
+
 const moduleLabels: Record<AudioModule, string> = {
   "speech-recognition": "语音转文字",
   "speech-synthesis": "文字转语音",
@@ -107,105 +131,45 @@ function formatEndpoint(value?: string | null) {
   }
 }
 
-async function fetchDashboardData(isAdmin: boolean) {
-  const [
-    taskResult,
-    billingResult,
-    userResult,
-    mimoResult,
-    emailResult,
-    settingsResult,
-  ] = await Promise.allSettled([
-    isAdmin ? api.adminTasks() : api.tasks(),
-    isAdmin ? api.adminBillingConfig() : api.billingConfig(),
-    isAdmin ? api.users() : Promise.resolve(undefined),
-    isAdmin ? api.adminMimoConfig() : Promise.resolve(undefined),
-    isAdmin ? api.adminEmailAuthConfig() : Promise.resolve(undefined),
-    isAdmin ? api.systemSettings() : Promise.resolve(undefined),
-  ])
-
-  return {
-    tasks:
-      taskResult.status === "fulfilled"
-        ? (taskResult.value as AudioTask[])
-        : undefined,
-    billing:
-      billingResult.status === "fulfilled"
-        ? (billingResult.value as BillingConfig)
-        : undefined,
-    users:
-      userResult?.status === "fulfilled" ? (userResult.value as User[]) : undefined,
-    mimo:
-      mimoResult.status === "fulfilled"
-        ? (mimoResult.value as MimoConfig | undefined)
-        : undefined,
-    email:
-      emailResult.status === "fulfilled"
-        ? (emailResult.value as EmailAuthConfigState | undefined)
-        : undefined,
-    settings:
-      settingsResult.status === "fulfilled"
-        ? (settingsResult.value as SystemSetting[] | undefined)
-        : undefined,
-  }
-}
-
 export default function DashboardPage() {
   const user = useCurrentUser()
   const [tasks, setTasks] = useState<AudioTask[]>([])
-  const [users, setUsers] = useState<User[]>([])
+  const [taskStats, setTaskStats] =
+    useState<DashboardTaskStats>(emptyTaskStats)
+  const [userStats, setUserStats] =
+    useState<DashboardUserStats>(emptyUserStats)
   const [billing, setBilling] = useState<BillingConfig>(emptyBilling)
   const [mimo, setMimo] = useState<MimoConfig>(emptyMimo)
   const [email, setEmail] = useState<EmailAuthConfigState>(emptyEmail)
-  const [settings, setSettings] = useState<SystemSetting[]>([])
+  const [settingsStats, setSettingsStats] =
+    useState<DashboardSettingsStats>(emptySettingsStats)
   const [loading, setLoading] = useState(false)
   const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null)
   const [updatedAt, setUpdatedAt] = useState<string | null>(null)
-  const isAdmin = user?.role === "admin"
+  const userId = user?.id
+  const userRole = user?.role
+  const isAdmin = userRole === "admin"
 
-  function applyDashboardData(data: {
-    tasks?: AudioTask[]
-    billing?: BillingConfig
-    users?: User[]
-    mimo?: MimoConfig
-    email?: EmailAuthConfigState
-    settings?: SystemSetting[]
-  }) {
-    if (data.tasks) {
-      setTasks(data.tasks)
-    }
-    if (data.billing) {
-      setBilling(data.billing)
-    }
-    if (data.users) {
-      setUsers(data.users)
-    }
-    if (data.mimo) {
-      setMimo(data.mimo)
-    }
-    if (data.email) {
-      setEmail(data.email)
-    }
-    if (data.settings) {
-      setSettings(data.settings)
-    }
-    if (
-      data.tasks ||
-      data.billing ||
-      data.users ||
-      data.mimo ||
-      data.email ||
-      data.settings
-    ) {
-      setUpdatedAt(new Date().toLocaleString("zh-CN", { hour12: false }))
-    }
+  function applyDashboardData(data: DashboardData) {
+    setTasks(data.tasks.items)
+    setTaskStats(data.tasks.stats)
+    setBilling(data.billing)
+    setUserStats(data.users ?? emptyUserStats)
+    setMimo(data.mimo ?? emptyMimo)
+    setEmail(data.email ?? emptyEmail)
+    setSettingsStats(data.settings ?? emptySettingsStats)
+    setUpdatedAt(
+      data.updatedAt ??
+        data.updated_at ??
+        new Date().toLocaleString("zh-CN", { hour12: false })
+    )
   }
 
   async function loadDashboard(showErrorToast = false) {
     setLoading(true)
 
     try {
-      applyDashboardData(await fetchDashboardData(isAdmin))
+      applyDashboardData(await api.dashboard())
     } catch (error) {
       if (showErrorToast) {
         toast.error(error instanceof Error ? error.message : "仪表盘加载失败")
@@ -226,6 +190,7 @@ export default function DashboardPage() {
       }
 
       setTasks((current) => current.filter((item) => item.id !== task.id))
+      void loadDashboard(false)
       toast.success("任务已删除")
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "任务删除失败")
@@ -235,11 +200,15 @@ export default function DashboardPage() {
   }
 
   useEffect(() => {
+    if (!userId) {
+      return
+    }
+
     let mounted = true
 
     async function syncDashboard() {
       try {
-        const data = await fetchDashboardData(isAdmin)
+        const data = await api.dashboard()
         if (!mounted) {
           return
         }
@@ -254,28 +223,24 @@ export default function DashboardPage() {
     return () => {
       mounted = false
     }
-  }, [isAdmin])
+  }, [userId, userRole])
 
-  const runningCount = tasks.filter((task) => task.status === "running").length
-  const queuedCount = tasks.filter((task) => task.status === "queued").length
-  const completedCount = tasks.filter(
-    (task) => task.status === "completed"
-  ).length
-  const failedCount = tasks.filter((task) => task.status === "failed").length
+  const totalTasks = taskStats.total
+  const runningCount = taskStats.running
+  const queuedCount = taskStats.queued
+  const completedCount = taskStats.completed
+  const failedCount = taskStats.failed
   const finishedCount = completedCount + failedCount
   const successRate =
     finishedCount > 0 ? Math.round((completedCount / finishedCount) * 100) : 0
   const enabledPlans = billing.plans.filter((plan) => plan.enabled)
   const defaultPlan =
     billing.plans.find((plan) => plan.id === billing.default_plan_id) ?? null
-  const activeUsers = users.filter((entry) => entry.status !== "suspended").length
-  const suspendedUsers = users.filter(
-    (entry) => entry.status === "suspended"
-  ).length
-  const verifiedUsers = users.filter((entry) => Boolean(entry.emailVerifiedAt)).length
-  const linuxDoLinkedUsers = users.filter((entry) =>
-    Boolean(entry.linuxdoId)
-  ).length
+  const activeUsers = userStats.active
+  const suspendedUsers = userStats.suspended
+  const verifiedUsers = userStats.verified
+  const linuxDoLinkedUsers =
+    userStats.linuxDoLinked ?? userStats.linuxdo_linked
   const pendingCount = runningCount + queuedCount
   const billingStatus = billing.enabled
     ? billing.configured
@@ -295,8 +260,8 @@ export default function DashboardPage() {
     : "停用"
 
   const moduleSummary = Object.entries(moduleLabels).map(([module, label]) => {
-    const count = tasks.filter((task) => task.module === module).length
-    const share = tasks.length > 0 ? Math.round((count / tasks.length) * 100) : 0
+    const count = taskStats.modules[module] ?? 0
+    const share = totalTasks > 0 ? Math.round((count / totalTasks) * 100) : 0
 
     return {
       module,
@@ -309,7 +274,7 @@ export default function DashboardPage() {
   const overviewMetrics = [
     {
       label: "总任务",
-      value: tasks.length,
+      value: totalTasks,
       meta: `${completedCount} 已完成`,
       tone: "default" as const,
       icon: <IconWaveSine className="size-4" />,
@@ -391,7 +356,7 @@ export default function DashboardPage() {
               <QuickLinkTile
                 href="/workbench"
                 title="任务处理"
-                value={`${tasks.length} 条记录`}
+                value={`${totalTasks} 条记录`}
               />
               <QuickLinkTile
                 href="/billing"
@@ -401,7 +366,7 @@ export default function DashboardPage() {
               <QuickLinkTile
                 href={isAdmin ? "/users" : "/settings"}
                 title={isAdmin ? "用户管理" : "个人设置"}
-                value={isAdmin ? `${users.length} 个账户` : "接口与账户"}
+                value={isAdmin ? `${userStats.total} 个账户` : "接口与账户"}
               />
               <QuickLinkTile
                 href={isAdmin ? "/system-settings" : "/workbench"}
@@ -425,7 +390,7 @@ export default function DashboardPage() {
               <div className="mb-3 flex items-center justify-between gap-3">
                 <span className="font-medium">任务模块</span>
                 <span className="text-xs text-muted-foreground">
-                  {tasks.length} 条记录
+                  {totalTasks} 条记录
                 </span>
               </div>
               <div className="space-y-4">
@@ -607,7 +572,7 @@ export default function DashboardPage() {
                 <CardContent className="space-y-3">
                   <StatusLine
                     label="用户总数"
-                    value={`${users.length}`}
+                    value={`${userStats.total}`}
                     icon={<IconUsers className="size-4" />}
                   />
                   <StatusLine
@@ -670,7 +635,7 @@ export default function DashboardPage() {
                   />
                   <StatusLine
                     label="配置记录"
-                    value={`${settings.length} 项`}
+                    value={`${settingsStats.total} 项`}
                     icon={<IconHistory className="size-4" />}
                   />
                 </CardContent>

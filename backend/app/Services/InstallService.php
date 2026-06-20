@@ -41,6 +41,7 @@ class InstallService
             'missing_config' => $missingConfig,
             'missingConfig' => $missingConfig,
             'build' => app(BuildInfoService::class)->info(),
+            'deployment' => $this->deploymentInfo(),
             'admin_bound' => $adminBound,
             'administratorBound' => $adminBound,
             'mimo_configured' => $mimoConfigured,
@@ -232,6 +233,44 @@ class InstallService
         }
 
         return $missing;
+    }
+
+    private function deploymentInfo(): array
+    {
+        $mode = strtolower((string) env('MIMO_DEPLOYMENT_MODE', ''));
+        if ($mode !== 'docker' && $mode !== 'source') {
+            $mode = $this->detectDeploymentMode();
+        }
+
+        return [
+            'mode' => $mode,
+            'label' => $mode === 'docker' ? 'Docker 版' : '宝塔源码版',
+        ];
+    }
+
+    private function detectDeploymentMode(): string
+    {
+        if ($this->canInspectRoot() && is_file('/.dockerenv')) {
+            return 'docker';
+        }
+
+        return 'source';
+    }
+
+    private function canInspectRoot(): bool
+    {
+        $openBasedir = (string) ini_get('open_basedir');
+        if ($openBasedir === '') {
+            return true;
+        }
+
+        foreach (explode(PATH_SEPARATOR, $openBasedir) as $path) {
+            if (trim($path) === '/') {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function installState(bool $installed, array $missingConfig): string

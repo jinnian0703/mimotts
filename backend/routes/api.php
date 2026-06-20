@@ -53,6 +53,7 @@ Route::middleware('auth.api')->group(function (): void {
     Route::put('/user/api-config', [UserConfigController::class, 'update']);
     Route::delete('/user/api-config', [UserConfigController::class, 'destroy']);
 
+    Route::get('/dashboard', [AdminOverviewController::class, 'dashboard']);
     Route::post('/mimo/asr', [MimoController::class, 'asr']);
     Route::post('/mimo/tts', [MimoController::class, 'tts']);
     Route::post('/mimo/voice-design', [MimoController::class, 'voiceDesign']);

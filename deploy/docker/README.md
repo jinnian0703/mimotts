@@ -43,11 +43,7 @@ docker compose up -d
 http://服务器地址:18081
 ```
 
-首次启动会自动完成安装。查看管理员账号：
-
-```bash
-docker compose logs app | grep "管理员"
-```
+首次打开安装页填写管理员账号密码。Docker 会自动准备 APP_KEY、SQLite 数据库、迁移和运行目录。
 
 ## 配置
 
@@ -70,15 +66,6 @@ CORS_ALLOWED_ORIGINS=http://服务器地址:18081
 LINUXDO_REDIRECT_URI=http://服务器地址:18081/api/auth/linuxdo/callback
 ```
 
-首次管理员账号可在 `.env` 中指定：
-
-```env
-MIMO_ADMIN_EMAIL=admin@example.com
-MIMO_ADMIN_PASSWORD=
-```
-
-`MIMO_ADMIN_PASSWORD` 留空时，容器会生成随机密码，并写入 `docker compose logs app`。系统已安装后重启不会重新生成或覆盖管理员。
-
 数据库默认保持 SQLite：
 
 ```env
@@ -97,7 +84,7 @@ git sparse-checkout set deploy/docker
 cd deploy/docker
 ```
 
-Docker 部署不需要进入安装页。容器会自动创建 SQLite 数据库、执行迁移、创建管理员，并把 `.env` 里的 Mimo API、LinuxDo、邮箱登录开关同步到系统配置。`.env` 保持示例 `APP_KEY` 时，容器会自动生成并保存到 Docker 数据卷中。
+Docker 部署仍通过安装页创建管理员。容器会自动创建 SQLite 数据库、执行迁移，并把 `.env` 里的 Mimo API、LinuxDo、邮箱登录开关同步到系统配置。`.env` 保持示例 `APP_KEY` 时，容器会自动生成并保存到 Docker 数据卷中。
 
 ## 管理
 

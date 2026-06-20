@@ -237,7 +237,7 @@ export default function UsersPage() {
       })
       setUsers(nextUsers)
       setSelectedIds([])
-      toast.success("批量操作已完成")
+      toast.success(action === "set_plan" ? "套餐额度已增加" : "批量操作已完成")
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "批量操作失败")
     } finally {
@@ -294,7 +294,7 @@ export default function UsersPage() {
                 onClick={() => bulk("set_plan")}
                 disabled={saving || selectedIds.length === 0}
               >
-                分配套餐
+                分配套餐额度
               </Button>
             </div>
           </div>

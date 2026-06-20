@@ -2,14 +2,9 @@
 
 namespace App\Console\Commands;
 
-use App\Models\SystemSetting;
-use App\Models\User;
-use App\Services\BillingConfigService;
 use App\Services\InstallService;
 use App\Services\MimoConfigService;
-use App\Services\QuotaService;
 use Illuminate\Console\Command;
-use Illuminate\Support\Str;
 
 class DockerInstall extends Command
 {
@@ -17,36 +12,13 @@ class DockerInstall extends Command
 
     protected $description = 'Initialize a Docker deployment from environment variables';
 
-    public function handle(InstallService $install, QuotaService $quota, BillingConfigService $billing): int
+    public function handle(InstallService $install): int
     {
-        $createdAdmin = false;
-        $plainPassword = null;
         $syncConfig = false;
 
         if (! $install->isInstalled()) {
-            $plainPassword = $this->adminPassword();
-            $admin = User::query()->create([
-                'name' => $this->envString('MIMO_ADMIN_NAME', 'MimoTTS Admin'),
-                'email' => Str::lower($this->envString('MIMO_ADMIN_EMAIL', 'admin@mimotts.local')),
-                'password' => $plainPassword,
-                'is_admin' => true,
-                'email_verified_at' => now(),
-                'status' => 'active',
-                'last_login_at' => now(),
-            ]);
-
-            $quota->grantDefaultPlan($admin, $billing->defaultPlan());
-
-            SystemSetting::putPlain('installation', [
-                'installed_at' => now()->toISOString(),
-                'admin_user_id' => $admin->id,
-                'email_login_enabled' => $this->envBool('EMAIL_LOGIN_ENABLED', true),
-                'linuxdo_configured' => $this->linuxDoConfigured(),
-                'source' => 'docker_env',
-            ]);
-
-            $createdAdmin = true;
             $syncConfig = true;
+            $this->line('MimoTTS Docker 环境已准备，请打开站点安装页创建管理员账号。');
         } else {
             $syncConfig = $this->envBool('MIMO_DOCKER_SYNC_CONFIG', false);
         }
@@ -55,13 +27,7 @@ class DockerInstall extends Command
             $this->syncRuntimeSettings($install);
         }
 
-        if ($createdAdmin) {
-            $this->line('MimoTTS Docker 初始化完成。');
-            $this->line('管理员账号：'.$this->envString('MIMO_ADMIN_EMAIL', 'admin@mimotts.local'));
-            $this->line('管理员密码：'.$plainPassword);
-            $this->line('请登录后立即修改管理员密码。');
-            $this->line('以后可执行：docker compose logs app | grep "管理员"');
-        } else {
+        if ($install->isInstalled()) {
             $this->line($syncConfig
                 ? 'MimoTTS Docker 已安装，跳过管理员创建并同步启动配置。'
                 : 'MimoTTS Docker 已安装，跳过管理员创建。'
@@ -122,13 +88,6 @@ class DockerInstall extends Command
                 'name' => $this->envString('MAIL_FROM_NAME', 'MimoTTS'),
             ],
         ];
-    }
-
-    private function adminPassword(): string
-    {
-        $configured = $this->envString('MIMO_ADMIN_PASSWORD', '');
-
-        return $configured !== '' ? $configured : Str::random(20);
     }
 
     private function linuxDoConfigured(): bool

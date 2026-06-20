@@ -61,6 +61,61 @@ class QuotaBillingReliabilityTest extends TestCase
             ->assertStatus(422);
     }
 
+    public function test_admin_assigning_plan_adds_plan_quota(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $user = User::factory()->create(['quota_balance' => 30]);
+        $this->saveBillingConfig([
+            'plans' => [
+                ['id' => 'starter', 'name' => '基础版', 'quota' => 100, 'base_amount' => 10, 'enabled' => true],
+            ],
+        ]);
+
+        $this->actingAs($admin)
+            ->putJson('/api/admin/users/'.$user->id, [
+                'name' => $user->name,
+                'email' => $user->email,
+                'role' => 'user',
+                'status' => 'active',
+                'plan_id' => 'starter',
+            ])
+            ->assertOk()
+            ->assertJsonPath('user.planId', 'starter')
+            ->assertJsonPath('user.quotaBalance', 130);
+
+        $this->assertSame(130, (int) $user->fresh()->quota_balance);
+        $entry = QuotaLedgerEntry::where('type', QuotaService::TYPE_GRANT)->firstOrFail();
+        $this->assertSame(100, (int) $entry->amount);
+        $this->assertSame(130, (int) $entry->balance_after);
+        $this->assertSame('admin_plan_assignment', $entry->metadata['source'] ?? null);
+    }
+
+    public function test_bulk_plan_assignment_adds_plan_quota(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $lowBalanceUser = User::factory()->create(['quota_balance' => 30]);
+        $highBalanceUser = User::factory()->create(['quota_balance' => 150]);
+        $this->saveBillingConfig([
+            'plans' => [
+                ['id' => 'starter', 'name' => '基础版', 'quota' => 100, 'base_amount' => 10, 'enabled' => true],
+            ],
+        ]);
+
+        $this->actingAs($admin)
+            ->postJson('/api/admin/users/bulk', [
+                'ids' => [$lowBalanceUser->id, $highBalanceUser->id],
+                'action' => 'set_plan',
+                'plan_id' => 'starter',
+            ])
+            ->assertOk();
+
+        $this->assertSame(130, (int) $lowBalanceUser->fresh()->quota_balance);
+        $this->assertSame(250, (int) $highBalanceUser->fresh()->quota_balance);
+        $this->assertSame('starter', $lowBalanceUser->fresh()->plan_id);
+        $this->assertSame('starter', $highBalanceUser->fresh()->plan_id);
+        $this->assertSame(2, QuotaLedgerEntry::where('type', QuotaService::TYPE_GRANT)->count());
+    }
+
     public function test_paid_notify_is_idempotent_and_uses_order_snapshot_after_plan_changes(): void
     {
         $user = User::factory()->create(['quota_balance' => 0]);

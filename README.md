@@ -72,17 +72,13 @@ cp .env.example .env
 docker compose up -d
 ```
 
-首次管理员账号会写入容器日志：
-
-```bash
-docker compose logs app | grep "管理员"
-```
-
 访问：
 
 ```text
 http://your-server:18081
 ```
+
+首次打开安装页填写管理员账号密码；Docker 会自动准备 APP_KEY、SQLite、迁移和运行目录。
 
 Docker 部署说明见 [deploy/docker/README.md](deploy/docker/README.md)。
 
@@ -102,7 +98,7 @@ Docker 部署：
 
 ## 配置
 
-首次安装在安装页填写：
+源码上传部署首次安装在安装页填写：
 
 - 数据库连接
 - 管理员账户

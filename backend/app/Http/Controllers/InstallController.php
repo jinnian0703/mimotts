@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Services\AuditLogger;
 use App\Services\InstallService;
 use App\Services\MailConfigService;
+use App\Services\MimoConfigService;
 use App\Services\WebInstallService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -93,9 +94,53 @@ class InstallController
             'mail_from_name' => ['nullable', 'string', 'max:255'],
         ]);
 
-        $emailAuth = $data['email_auth'] ?? [];
+        $emailAuth = array_key_exists('email_auth', $data)
+            ? ($data['email_auth'] ?? [])
+            : $install->emailAuthConfigForUpdate();
+        $emailSmtp = $emailAuth['smtp'] ?? [];
+        $emailApi = $emailAuth['api'] ?? [];
+        $emailSender = $emailAuth['sender'] ?? [];
+        $emailTemplates = $emailAuth['templates'] ?? [];
         $baseUrl = $this->baseUrl($request);
-        $linuxDoRedirectUri = $data['linuxdo_redirect_uri'] ?? $this->defaultLinuxDoRedirectUri($request, $baseUrl);
+        $currentLinuxDo = $install->linuxDoConfigForUpdate();
+        $currentMimo = app(MimoConfigService::class)->systemConfig();
+        $linuxDoRedirectUri = $data['linuxdo_redirect_uri']
+            ?? $currentLinuxDo['redirect_uri']
+            ?? $this->defaultLinuxDoRedirectUri($request, $baseUrl);
+        $emailConfig = [
+            'enabled' => (bool) ($emailAuth['enabled'] ?? true),
+            'registration_enabled' => array_key_exists('registration_enabled', $emailAuth)
+                ? (bool) $emailAuth['registration_enabled']
+                : true,
+            'verification_required' => (bool) ($emailAuth['verification_required'] ?? false),
+            'driver' => $emailAuth['driver'] ?? 'smtp',
+            'smtp' => [
+                'host' => $emailAuth['smtp_host'] ?? $emailSmtp['host'] ?? $data['smtp_host'] ?? null,
+                'port' => $emailAuth['smtp_port'] ?? $emailSmtp['port'] ?? $data['smtp_port'] ?? null,
+                'username' => $emailAuth['smtp_username'] ?? $emailSmtp['username'] ?? $data['smtp_username'] ?? null,
+                'password' => $emailAuth['smtp_password'] ?? $emailSmtp['password'] ?? $data['smtp_password'] ?? null,
+                'encryption' => $emailAuth['smtp_encryption'] ?? $emailSmtp['encryption'] ?? $data['smtp_encryption'] ?? null,
+            ],
+            'api' => [
+                'provider' => $emailAuth['mail_api_provider'] ?? $emailApi['provider'] ?? $data['mail_api_provider'] ?? 'generic_json',
+                'endpoint' => $emailAuth['mail_api_endpoint'] ?? $emailApi['endpoint'] ?? $data['mail_api_endpoint'] ?? null,
+                'token' => $emailAuth['mail_api_token'] ?? $emailApi['token'] ?? $data['mail_api_token'] ?? null,
+            ],
+            'sender' => [
+                'address' => $emailAuth['mail_from_address'] ?? $emailSender['address'] ?? $data['mail_from_address'] ?? null,
+                'name' => $emailAuth['mail_from_name'] ?? $emailSender['name'] ?? $data['mail_from_name'] ?? null,
+            ],
+            'templates' => [
+                'verification' => [
+                    'subject' => $emailAuth['verification_subject'] ?? $emailTemplates['verification']['subject'] ?? null,
+                    'body' => $emailAuth['verification_body'] ?? $emailTemplates['verification']['body'] ?? null,
+                ],
+                'two_factor' => [
+                    'subject' => $emailAuth['two_factor_subject'] ?? $emailTemplates['two_factor']['subject'] ?? null,
+                    'body' => $emailAuth['two_factor_body'] ?? $emailTemplates['two_factor']['body'] ?? null,
+                ],
+            ],
+        ];
 
         try {
             $admin = $webInstall->install([
@@ -110,49 +155,19 @@ class InstallController
                 'db_database' => $data['db_database'] ?? config('database.connections.'.config('database.default').'.database'),
                 'db_username' => $data['db_username'] ?? config('database.connections.mysql.username'),
                 'db_password' => $data['db_password'] ?? '',
-                'linuxdo_client_id' => $data['linuxdo_client_id'] ?? '',
-                'linuxdo_client_secret' => $data['linuxdo_client_secret'] ?? '',
+                'linuxdo_client_id' => $data['linuxdo_client_id'] ?? ($currentLinuxDo['client_id'] ?? ''),
+                'linuxdo_client_secret' => $data['linuxdo_client_secret'] ?? ($currentLinuxDo['client_secret'] ?? ''),
                 'linuxdo_redirect_uri' => $linuxDoRedirectUri,
-                'mimo_api_key' => $data['mimo_api_key'] ?? '',
-                'mimo_base_url' => $data['mimo_base_url'] ?? 'https://api.xiaomimimo.com/v1',
-                'email_config' => [
-                    'enabled' => true,
-                    'verification_required' => (bool) ($emailAuth['verification_required'] ?? false),
-                    'driver' => $emailAuth['driver'] ?? 'smtp',
-                    'smtp' => [
-                        'host' => $emailAuth['smtp_host'] ?? $data['smtp_host'] ?? null,
-                        'port' => $emailAuth['smtp_port'] ?? $data['smtp_port'] ?? null,
-                        'username' => $emailAuth['smtp_username'] ?? $data['smtp_username'] ?? null,
-                        'password' => $emailAuth['smtp_password'] ?? $data['smtp_password'] ?? null,
-                        'encryption' => $emailAuth['smtp_encryption'] ?? $data['smtp_encryption'] ?? null,
-                    ],
-                    'api' => [
-                        'provider' => $emailAuth['mail_api_provider'] ?? $data['mail_api_provider'] ?? 'generic_json',
-                        'endpoint' => $emailAuth['mail_api_endpoint'] ?? $data['mail_api_endpoint'] ?? null,
-                        'token' => $emailAuth['mail_api_token'] ?? $data['mail_api_token'] ?? null,
-                    ],
-                    'sender' => [
-                        'address' => $emailAuth['mail_from_address'] ?? $data['mail_from_address'] ?? null,
-                        'name' => $emailAuth['mail_from_name'] ?? $data['mail_from_name'] ?? null,
-                    ],
-                    'templates' => [
-                        'verification' => [
-                            'subject' => $emailAuth['verification_subject'] ?? null,
-                            'body' => $emailAuth['verification_body'] ?? null,
-                        ],
-                        'two_factor' => [
-                            'subject' => $emailAuth['two_factor_subject'] ?? null,
-                            'body' => $emailAuth['two_factor_body'] ?? null,
-                        ],
-                    ],
-                ],
-                'mail_host' => $emailAuth['smtp_host'] ?? $data['smtp_host'] ?? '',
-                'mail_port' => $emailAuth['smtp_port'] ?? $data['smtp_port'] ?? 587,
-                'mail_username' => $emailAuth['smtp_username'] ?? $data['smtp_username'] ?? '',
-                'mail_password' => $emailAuth['smtp_password'] ?? $data['smtp_password'] ?? '',
-                'mail_encryption' => $emailAuth['smtp_encryption'] ?? $data['smtp_encryption'] ?? 'tls',
-                'mail_from_address' => $emailAuth['mail_from_address'] ?? $data['mail_from_address'] ?? '',
-                'mail_from_name' => $emailAuth['mail_from_name'] ?? $data['mail_from_name'] ?? 'MimoTTS',
+                'mimo_api_key' => $data['mimo_api_key'] ?? ($currentMimo['api_key'] ?? ''),
+                'mimo_base_url' => $data['mimo_base_url'] ?? ($currentMimo['base_url'] ?? 'https://api.xiaomimimo.com/v1'),
+                'email_config' => $emailConfig,
+                'mail_host' => $emailConfig['smtp']['host'] ?? '',
+                'mail_port' => $emailConfig['smtp']['port'] ?? 587,
+                'mail_username' => $emailConfig['smtp']['username'] ?? '',
+                'mail_password' => $emailConfig['smtp']['password'] ?? '',
+                'mail_encryption' => $emailConfig['smtp']['encryption'] ?? 'tls',
+                'mail_from_address' => $emailConfig['sender']['address'] ?? '',
+                'mail_from_name' => $emailConfig['sender']['name'] ?? 'MimoTTS',
             ]);
         } catch (Throwable $e) {
             report($e);

@@ -106,19 +106,7 @@ export function useCurrentUser() {
     }
 
     const unsubscribe = onSessionChange(syncStoredUser)
-
-    api
-      .me()
-      .then((nextUser) => {
-        setSession(nextUser)
-        setUser(nextUser)
-      })
-      .catch(() => {
-        clearSession()
-        if (!getStoredUser()) {
-          setUser(null)
-        }
-      })
+    syncStoredUser()
 
     return unsubscribe
   }, [])

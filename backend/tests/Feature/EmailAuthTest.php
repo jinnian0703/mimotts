@@ -367,6 +367,42 @@ class EmailAuthTest extends TestCase
         ]);
     }
 
+    public function test_linuxdo_callback_redirects_to_saved_frontend_url(): void
+    {
+        config(['app.frontend_url' => 'https://old.example.com']);
+        $admin = User::factory()->admin()->create();
+        SystemSetting::putPlain('installation', [
+            'installed_at' => now()->toISOString(),
+            'admin_user_id' => $admin->id,
+        ]);
+        SystemSetting::putPlain('basic_info', [
+            'frontend_url' => 'https://new.example.com',
+        ]);
+        app(InstallService::class)->setEmailAuthConfig([
+            'enabled' => true,
+            'registration_enabled' => true,
+        ]);
+
+        $profile = [
+            'id' => 'linuxdo-existing-user',
+            'username' => 'LinuxDo User',
+            'email' => 'linuxdo-existing@example.com',
+        ];
+        $user = User::factory()->create([
+            'linuxdo_id' => 'linuxdo-existing-user',
+        ]);
+
+        $oauth = \Mockery::mock(LinuxDoOAuthService::class);
+        $oauth->shouldReceive('fetchUser')->once()->with('auth-code')->andReturn($profile);
+        $oauth->shouldReceive('existingUser')->once()->with($profile)->andReturn($user);
+        $oauth->shouldReceive('syncUser')->once()->with($profile)->andReturn($user);
+        $this->app->instance(LinuxDoOAuthService::class, $oauth);
+
+        $this->withSession(['linuxdo_oauth_state' => 'state-token'])
+            ->get('/api/auth/linuxdo/callback?code=auth-code&state=state-token')
+            ->assertRedirect('https://new.example.com/');
+    }
+
     public function test_user_can_bind_linuxdo_account(): void
     {
         $user = User::factory()->create([

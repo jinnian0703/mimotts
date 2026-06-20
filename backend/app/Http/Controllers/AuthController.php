@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\SystemSetting;
 use App\Models\User;
 use App\Services\AccountSecurityService;
 use App\Services\AuditLogger;
@@ -83,7 +84,7 @@ class AuthController
         $request->session()->regenerate();
         $audit->recordForUser($user, $request, 'auth.login', ['provider' => 'linuxdo']);
 
-        $frontendUrl = rtrim(config('app.frontend_url'), '/');
+        $frontendUrl = $this->frontendUrl();
         if ($request->expectsJson()) {
             return response()->json(['user' => $user]);
         }
@@ -95,7 +96,7 @@ class AuthController
     {
         $userId = $request->session()->pull('linuxdo_oauth_user_id');
         $user = $request->user() ?: User::query()->find($userId);
-        $frontendUrl = rtrim(config('app.frontend_url'), '/');
+        $frontendUrl = $this->frontendUrl();
 
         if (! $user || (string) $user->id !== (string) $userId) {
             return $request->expectsJson()
@@ -438,6 +439,19 @@ class AuthController
         return array_key_exists('registration_enabled', $config)
             ? (bool) $config['registration_enabled']
             : true;
+    }
+
+    private function frontendUrl(): string
+    {
+        try {
+            $setting = SystemSetting::where('key', 'basic_info')->first();
+            $value = $setting ? $setting->decodedValue() : [];
+            $storedUrl = is_array($value) ? trim((string) ($value['frontend_url'] ?? '')) : '';
+        } catch (Throwable $e) {
+            $storedUrl = '';
+        }
+
+        return rtrim($storedUrl !== '' ? $storedUrl : config('app.frontend_url'), '/');
     }
 
     private function emailUserQuery(string $email)

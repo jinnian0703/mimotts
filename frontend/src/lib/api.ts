@@ -9,6 +9,7 @@ import type {
   BasicInfoConfig,
   BillingCheckout,
   BillingConfig,
+  DashboardData,
   EmailLoginResult,
   EmailLoginPayload,
   EmailRegisterPayload,
@@ -334,6 +335,22 @@ export const api = {
   },
   me() {
     return request<{ user: User }>("/me").then(({ user }) => mapUser(user))
+  },
+  dashboard() {
+    return request<{ dashboard: DashboardData }>("/dashboard").then(
+      ({ dashboard }) => ({
+        ...dashboard,
+        users: dashboard.users
+          ? {
+              ...dashboard.users,
+              linuxDoLinked:
+                dashboard.users.linuxDoLinked ??
+                dashboard.users.linuxdo_linked,
+            }
+          : dashboard.users,
+        updatedAt: dashboard.updatedAt ?? dashboard.updated_at,
+      })
+    )
   },
   logout() {
     return request<void>("/auth/logout", { method: "POST" })

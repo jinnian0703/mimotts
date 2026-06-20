@@ -111,6 +111,8 @@ export default function InstallPage() {
   const [frontendUrl, setFrontendUrl] = useState("")
   const [linuxdoRedirectUri, setLinuxdoRedirectUri] = useState("")
 
+  const isDockerInstall = installStatus?.deployment?.mode === "docker"
+
   useEffect(() => {
     const timeout = window.setTimeout(() => {
       const origin = window.location.origin
@@ -162,13 +164,15 @@ export default function InstallPage() {
     const linuxdoClientSecret = String(
       data.get("linuxdo_client_secret") || ""
     ).trim()
-    const selectedDbConnection: DatabaseConnection =
+    const selectedDbConnection: DatabaseConnection = isDockerInstall ||
       String(data.get("db_connection") || "mysql") === "sqlite"
-        ? "sqlite"
-        : "mysql"
+      ? "sqlite"
+      : "mysql"
     const dbHost = String(data.get("db_host") || "").trim()
     const dbPort = Number(data.get("db_port") || 3306)
-    const dbDatabase = String(data.get("db_database") || "").trim()
+    const dbDatabase = isDockerInstall
+      ? "/var/www/backend/storage/database.sqlite"
+      : String(data.get("db_database") || "").trim()
     const dbUsername = String(data.get("db_username") || "").trim()
     const dbPassword = String(data.get("db_password") || "")
 
@@ -213,13 +217,23 @@ export default function InstallPage() {
       admin_password_confirmation: String(
         data.get("admin_password_confirmation") || ""
       ),
-      linuxdo_client_id: linuxdoClientId,
-      linuxdo_client_secret: linuxdoClientSecret,
-      linuxdo_redirect_uri: linuxdoRedirectUri.trim(),
-      mimo_base_url: String(data.get("mimo_base_url") || "").trim(),
-      mimo_api_key: String(data.get("mimo_api_key") || "").trim(),
-      email_auth: smtpEnabled
-        ? {
+      linuxdo_client_id: isDockerInstall ? undefined : linuxdoClientId,
+      linuxdo_client_secret: isDockerInstall
+        ? undefined
+        : linuxdoClientSecret,
+      linuxdo_redirect_uri: isDockerInstall
+        ? undefined
+        : linuxdoRedirectUri.trim(),
+      mimo_base_url: isDockerInstall
+        ? undefined
+        : String(data.get("mimo_base_url") || "").trim(),
+      mimo_api_key: isDockerInstall
+        ? undefined
+        : String(data.get("mimo_api_key") || "").trim(),
+      email_auth: isDockerInstall
+        ? undefined
+        : smtpEnabled
+          ? {
             enabled: true,
             driver: mailDriver,
             smtp_host: String(data.get("smtp_host") || ""),
@@ -238,7 +252,7 @@ export default function InstallPage() {
             mail_from_address: String(data.get("mail_from_address") || ""),
             mail_from_name: String(data.get("mail_from_name") || ""),
           }
-        : { enabled: true },
+          : { enabled: true },
     }
 
     try {
@@ -282,8 +296,23 @@ export default function InstallPage() {
             <CardTitle>系统安装</CardTitle>
           </CardHeader>
           <CardContent>
-            <FieldGroup className="grid gap-6 xl:grid-cols-2">
+            <FieldGroup className={isDockerInstall ? "grid gap-6" : "grid gap-6 xl:grid-cols-2"}>
               <FieldGroup className="gap-6">
+                {isDockerInstall ? (
+                  <FieldSet>
+                    <FieldLegendWithRequirement requirement="optional">
+                      Docker 自动配置
+                    </FieldLegendWithRequirement>
+                    <Alert>
+                      <IconCircleCheck />
+                      <AlertTitle>已使用当前访问地址和内置 SQLite</AlertTitle>
+                      <AlertDescription>
+                        数据库文件、迁移、APP_KEY、运行目录和 .env 中的接口/登录配置会由容器自动准备。
+                      </AlertDescription>
+                    </Alert>
+                  </FieldSet>
+                ) : (
+                <>
                 <FieldSet>
                   <FieldLegendWithRequirement requirement="required">
                     站点
@@ -335,130 +364,132 @@ export default function InstallPage() {
                     数据库
                   </FieldLegendWithRequirement>
                   <FieldGroup className="grid gap-5 md:grid-cols-2">
-                    <Field className="md:col-span-2">
-                      <FieldLabelWithRequirement
-                        htmlFor="db_connection"
-                        requirement="required"
-                      >
-                        类型
-                      </FieldLabelWithRequirement>
-                      <Select
-                        name="db_connection"
-                        value={dbConnection}
-                        onValueChange={(value) =>
-                          setDbConnection(
-                            value === "sqlite" ? "sqlite" : "mysql"
-                          )
-                        }
-                      >
-                        <SelectTrigger id="db_connection" className="w-full">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectGroup>
-                            <SelectItem value="mysql">
-                              MySQL / MariaDB
-                            </SelectItem>
-                            <SelectItem value="sqlite">SQLite</SelectItem>
-                          </SelectGroup>
-                        </SelectContent>
-                      </Select>
-                    </Field>
+                      <Field className="md:col-span-2">
+                        <FieldLabelWithRequirement
+                          htmlFor="db_connection"
+                          requirement="required"
+                        >
+                          类型
+                        </FieldLabelWithRequirement>
+                        <Select
+                          name="db_connection"
+                          value={dbConnection}
+                          onValueChange={(value) =>
+                            setDbConnection(
+                              value === "sqlite" ? "sqlite" : "mysql"
+                            )
+                          }
+                        >
+                          <SelectTrigger id="db_connection" className="w-full">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectGroup>
+                              <SelectItem value="mysql">
+                                MySQL / MariaDB
+                              </SelectItem>
+                              <SelectItem value="sqlite">SQLite</SelectItem>
+                            </SelectGroup>
+                          </SelectContent>
+                        </Select>
+                      </Field>
 
-                    {dbConnection === "mysql" ? (
-                      <>
-                        <Field>
-                          <FieldLabelWithRequirement
-                            htmlFor="db_host"
-                            requirement="required"
-                          >
-                            主机
-                          </FieldLabelWithRequirement>
-                          <Input
-                            id="db_host"
-                            name="db_host"
-                            defaultValue="127.0.0.1"
-                            required
-                          />
-                        </Field>
-                        <Field>
-                          <FieldLabelWithRequirement
-                            htmlFor="db_port"
-                            requirement="required"
-                          >
-                            端口
-                          </FieldLabelWithRequirement>
-                          <Input
-                            id="db_port"
-                            name="db_port"
-                            type="number"
-                            min="1"
-                            max="65535"
-                            defaultValue="3306"
-                            required
-                          />
-                        </Field>
-                        <Field>
+                      {dbConnection === "mysql" ? (
+                        <>
+                          <Field>
+                            <FieldLabelWithRequirement
+                              htmlFor="db_host"
+                              requirement="required"
+                            >
+                              主机
+                            </FieldLabelWithRequirement>
+                            <Input
+                              id="db_host"
+                              name="db_host"
+                              defaultValue="127.0.0.1"
+                              required
+                            />
+                          </Field>
+                          <Field>
+                            <FieldLabelWithRequirement
+                              htmlFor="db_port"
+                              requirement="required"
+                            >
+                              端口
+                            </FieldLabelWithRequirement>
+                            <Input
+                              id="db_port"
+                              name="db_port"
+                              type="number"
+                              min="1"
+                              max="65535"
+                              defaultValue="3306"
+                              required
+                            />
+                          </Field>
+                          <Field>
+                            <FieldLabelWithRequirement
+                              htmlFor="db_database"
+                              requirement="required"
+                            >
+                              数据库名
+                            </FieldLabelWithRequirement>
+                            <Input
+                              id="db_database"
+                              name="db_database"
+                              defaultValue="mimo"
+                              required
+                            />
+                          </Field>
+                          <Field>
+                            <FieldLabelWithRequirement
+                              htmlFor="db_username"
+                              requirement="required"
+                            >
+                              用户名
+                            </FieldLabelWithRequirement>
+                            <Input
+                              id="db_username"
+                              name="db_username"
+                              defaultValue="mimo"
+                              required
+                            />
+                          </Field>
+                          <Field className="md:col-span-2">
+                            <FieldLabelWithRequirement
+                              htmlFor="db_password"
+                              requirement="required"
+                            >
+                              密码
+                            </FieldLabelWithRequirement>
+                            <Input
+                              id="db_password"
+                              name="db_password"
+                              type="password"
+                              required
+                            />
+                          </Field>
+                        </>
+                      ) : (
+                        <Field className="md:col-span-2">
                           <FieldLabelWithRequirement
                             htmlFor="db_database"
                             requirement="required"
                           >
-                            数据库名
+                            数据库文件
                           </FieldLabelWithRequirement>
                           <Input
                             id="db_database"
                             name="db_database"
-                            defaultValue="mimo"
+                            defaultValue="database.sqlite"
                             required
                           />
                         </Field>
-                        <Field>
-                          <FieldLabelWithRequirement
-                            htmlFor="db_username"
-                            requirement="required"
-                          >
-                            用户名
-                          </FieldLabelWithRequirement>
-                          <Input
-                            id="db_username"
-                            name="db_username"
-                            defaultValue="mimo"
-                            required
-                          />
-                        </Field>
-                        <Field className="md:col-span-2">
-                          <FieldLabelWithRequirement
-                            htmlFor="db_password"
-                            requirement="required"
-                          >
-                            密码
-                          </FieldLabelWithRequirement>
-                          <Input
-                            id="db_password"
-                            name="db_password"
-                            type="password"
-                            required
-                          />
-                        </Field>
-                      </>
-                    ) : (
-                      <Field className="md:col-span-2">
-                        <FieldLabelWithRequirement
-                          htmlFor="db_database"
-                          requirement="required"
-                        >
-                          数据库文件
-                        </FieldLabelWithRequirement>
-                        <Input
-                          id="db_database"
-                          name="db_database"
-                          defaultValue="database.sqlite"
-                          required
-                        />
-                      </Field>
-                    )}
+                      )}
                   </FieldGroup>
                 </FieldSet>
+                </>
+                )}
 
                 <FieldSet>
                   <FieldLegendWithRequirement requirement="required">
@@ -522,6 +553,7 @@ export default function InstallPage() {
                 </FieldSet>
               </FieldGroup>
 
+              {!isDockerInstall && (
               <FieldGroup className="gap-6">
                 <FieldSet>
                   <FieldLegendWithRequirement requirement="optional">
@@ -812,6 +844,7 @@ export default function InstallPage() {
                   </FieldGroup>
                 </FieldSet>
               </FieldGroup>
+              )}
             </FieldGroup>
           </CardContent>
           <CardFooter className="justify-end">

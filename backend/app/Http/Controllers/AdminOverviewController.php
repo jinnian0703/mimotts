@@ -11,6 +11,8 @@ use App\Services\AudioJobPayloadSummary;
 use App\Services\AudioRetentionService;
 use App\Services\BuildInfoService;
 use App\Services\BillingConfigService;
+use App\Services\InstallService;
+use App\Services\MimoConfigService;
 use App\Services\QuotaService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -21,6 +23,39 @@ use Illuminate\Validation\Rule;
 class AdminOverviewController
 {
     private const BASIC_INFO_KEY = 'basic_info';
+
+    public function dashboard(
+        Request $request,
+        BillingConfigService $billing,
+        InstallService $install,
+        MimoConfigService $mimo
+    ): JsonResponse {
+        $user = $request->user();
+        $isAdmin = (bool) $user->is_admin;
+        $taskQuery = AudioJob::query()
+            ->when(! $isAdmin, fn ($query) => $query->where('user_id', $user->id));
+
+        return response()->json([
+            'dashboard' => [
+                'tasks' => [
+                    'items' => (clone $taskQuery)
+                        ->with(['files', 'user'])
+                        ->latest()
+                        ->limit(8)
+                        ->get()
+                        ->map(fn (AudioJob $job) => $this->serializeJob($job))
+                        ->values(),
+                    'stats' => $this->taskStats(clone $taskQuery),
+                ],
+                'billing' => $billing->publicConfig(),
+                'users' => $isAdmin ? $this->userStats() : null,
+                'mimo' => $isAdmin ? $mimo->publicSystemConfig() : null,
+                'email' => $isAdmin ? $this->dashboardEmailConfig($install->emailAuthConfig()) : null,
+                'settings' => $isAdmin ? ['total' => SystemSetting::query()->count()] : null,
+                'updated_at' => now()->timezone(config('app.task_timezone', 'Asia/Shanghai'))->format('Y-m-d H:i:s'),
+            ],
+        ]);
+    }
 
     public function users(): JsonResponse
     {
@@ -75,6 +110,8 @@ class AdminOverviewController
         $emailChanged = $email !== $user->email;
 
         $originalBalance = (int) $user->quota_balance;
+        $originalPlanId = $user->plan_id;
+        $nextPlanId = $data['plan_id'] ?? null;
 
         $user->forceFill([
             'name' => $data['name'],
@@ -82,7 +119,7 @@ class AdminOverviewController
             'email_verified_at' => $email ? ($emailChanged ? now() : $user->email_verified_at) : null,
             'is_admin' => $data['role'] === 'admin',
             'status' => $data['status'],
-            'plan_id' => $data['plan_id'] ?? null,
+            'plan_id' => $nextPlanId,
         ])->save();
 
         if (array_key_exists('quota_balance', $data) && (int) $data['quota_balance'] !== $originalBalance) {
@@ -91,6 +128,11 @@ class AdminOverviewController
                 'adjustment_mode' => 'set',
                 'legacy_endpoint' => true,
             ]);
+        } elseif ($nextPlanId && $nextPlanId !== $originalPlanId) {
+            $plan = $this->planById($billing, $nextPlanId);
+            if ($plan) {
+                $this->grantUserPlanQuota($user, $plan, $quota, $request->user()->id);
+            }
         }
 
         return response()->json([
@@ -155,7 +197,7 @@ class AdminOverviewController
         ]);
     }
 
-    public function bulkUsers(Request $request, BillingConfigService $billing): JsonResponse
+    public function bulkUsers(Request $request, BillingConfigService $billing, QuotaService $quota): JsonResponse
     {
         $planIds = $this->planIds($billing);
         $data = $request->validate([
@@ -181,7 +223,20 @@ class AdminOverviewController
             $query->where('id', '<>', $request->user()->id);
             $query->update(['status' => 'suspended']);
         } elseif ($data['action'] === 'set_plan') {
-            $query->update(['plan_id' => $data['plan_id'] ?? null]);
+            $plan = $this->planById($billing, $data['plan_id'] ?? null);
+            if (! $plan) {
+                return response()->json([
+                    'error' => [
+                        'code' => 'PlanRequired',
+                        'message' => '请选择套餐',
+                    ],
+                ], 422);
+            }
+
+            $query->get()->each(function (User $target) use ($plan, $quota, $request): void {
+                $target->forceFill(['plan_id' => (string) $plan['id']])->save();
+                $this->grantUserPlanQuota($target, $plan, $quota, $request->user()->id);
+            });
         }
 
         return $this->users();
@@ -374,6 +429,66 @@ class AdminOverviewController
         ]);
     }
 
+    private function taskStats($query): array
+    {
+        $statusCounts = (clone $query)
+            ->selectRaw('status, count(*) as aggregate')
+            ->groupBy('status')
+            ->pluck('aggregate', 'status');
+        $moduleCounts = [];
+
+        foreach ((clone $query)
+            ->selectRaw('type, count(*) as aggregate')
+            ->groupBy('type')
+            ->pluck('aggregate', 'type') as $type => $count) {
+            $module = $this->moduleForType((string) $type);
+            $moduleCounts[$module] = ($moduleCounts[$module] ?? 0) + (int) $count;
+        }
+
+        return [
+            'total' => (clone $query)->count(),
+            'queued' => (int) ($statusCounts['queued'] ?? 0),
+            'running' => (int) ($statusCounts['running'] ?? 0),
+            'completed' => (int) ($statusCounts['completed'] ?? 0),
+            'failed' => (int) ($statusCounts['failed'] ?? 0),
+            'modules' => $moduleCounts,
+        ];
+    }
+
+    private function userStats(): array
+    {
+        return [
+            'total' => User::query()->count(),
+            'active' => User::query()
+                ->where(fn ($query) => $query->whereNull('status')->orWhere('status', '<>', 'suspended'))
+                ->count(),
+            'suspended' => User::query()->where('status', 'suspended')->count(),
+            'verified' => User::query()->whereNotNull('email_verified_at')->count(),
+            'linuxdo_linked' => User::query()->whereNotNull('linuxdo_id')->count(),
+        ];
+    }
+
+    private function dashboardEmailConfig(array $config): array
+    {
+        return [
+            'enabled' => (bool) ($config['enabled'] ?? false),
+            'registration_enabled' => (bool) ($config['registration_enabled'] ?? true),
+            'verification_required' => (bool) ($config['verification_required'] ?? false),
+            'driver' => $config['driver'] ?? 'smtp',
+            'smtp_configured' => (bool) ($config['smtp_configured'] ?? false),
+            'api_configured' => (bool) ($config['api_configured'] ?? false),
+            'sender_configured' => (bool) ($config['sender_configured'] ?? false),
+            'smtp' => [
+                'host' => $config['smtp']['host'] ?? null,
+                'port' => $config['smtp']['port'] ?? null,
+                'username' => $config['smtp']['username'] ?? null,
+                'password_configured' => (bool) ($config['smtp']['password_configured'] ?? false),
+                'encryption' => $config['smtp']['encryption'] ?? null,
+            ],
+            'linuxdo' => $config['linuxdo'] ?? [],
+        ];
+    }
+
     private function jobQuery(?int $userId = null)
     {
         return AudioJob::query()
@@ -407,6 +522,35 @@ class AdminOverviewController
             fn (array $plan) => (string) ($plan['id'] ?? ''),
             $billing->config()['plans'] ?? []
         )));
+    }
+
+    private function planById(BillingConfigService $billing, ?string $planId): ?array
+    {
+        if (! $planId) {
+            return null;
+        }
+
+        foreach ($billing->config()['plans'] ?? [] as $plan) {
+            if ((string) ($plan['id'] ?? '') === $planId) {
+                return $plan;
+            }
+        }
+
+        return null;
+    }
+
+    private function grantUserPlanQuota(User $user, array $plan, QuotaService $quota, int $adminUserId): void
+    {
+        $planQuota = max(0, (int) ($plan['quota'] ?? 0));
+        $quota->grant($user, $planQuota, QuotaService::TYPE_GRANT, '分配套餐额度', [
+            'admin_user_id' => $adminUserId,
+            'target_user_id' => $user->id,
+            'adjustment_mode' => 'add',
+            'source' => 'admin_plan_assignment',
+            'plan_id' => (string) ($plan['id'] ?? ''),
+            'plan_name' => (string) ($plan['name'] ?? ''),
+            'plan_quota' => $planQuota,
+        ]);
     }
 
     private function basicInfoConfig(): array

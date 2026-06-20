@@ -15,9 +15,6 @@ class DockerInstallCommandTest extends TestCase
     use RefreshDatabase;
 
     private array $environmentKeys = [
-        'MIMO_ADMIN_NAME',
-        'MIMO_ADMIN_EMAIL',
-        'MIMO_ADMIN_PASSWORD',
         'MIMO_DOCKER_SYNC_CONFIG',
         'EMAIL_LOGIN_ENABLED',
         'EMAIL_REGISTRATION_ENABLED',
@@ -38,11 +35,8 @@ class DockerInstallCommandTest extends TestCase
         parent::tearDown();
     }
 
-    public function test_it_installs_docker_deployment_from_environment(): void
+    public function test_uninstalled_docker_deployment_syncs_environment_and_waits_for_installer(): void
     {
-        putenv('MIMO_ADMIN_NAME=Docker Owner');
-        putenv('MIMO_ADMIN_EMAIL=owner@example.com');
-        putenv('MIMO_ADMIN_PASSWORD=password123');
         putenv('EMAIL_LOGIN_ENABLED=false');
         putenv('EMAIL_REGISTRATION_ENABLED=false');
         putenv('LINUXDO_LOGIN_ENABLED=true');
@@ -53,19 +47,11 @@ class DockerInstallCommandTest extends TestCase
         putenv('MIMO_BASE_URL=https://api.example.com/v1');
 
         $this->artisan('mimo:docker-install')
-            ->expectsOutput('MimoTTS Docker 初始化完成。')
-            ->expectsOutput('管理员账号：owner@example.com')
-            ->expectsOutput('管理员密码：password123')
+            ->expectsOutput('MimoTTS Docker 环境已准备，请打开站点安装页创建管理员账号。')
             ->assertExitCode(0);
 
-        $admin = User::query()->where('email', 'owner@example.com')->firstOrFail();
-        $this->assertTrue($admin->is_admin);
-        $this->assertTrue(Hash::check('password123', (string) $admin->password));
-
-        $installation = SystemSetting::query()->where('key', 'installation')->firstOrFail()->decodedValue();
-        $this->assertSame('docker_env', $installation['source'] ?? null);
-        $this->assertFalse((bool) ($installation['email_login_enabled'] ?? true));
-        $this->assertTrue((bool) ($installation['linuxdo_configured'] ?? false));
+        $this->assertSame(0, User::query()->where('is_admin', true)->count());
+        $this->assertDatabaseMissing('system_settings', ['key' => 'installation']);
 
         $this->assertSame('mimo-secret', app(MimoConfigService::class)->systemConfig()['api_key']);
 
@@ -91,16 +77,11 @@ class DockerInstallCommandTest extends TestCase
             'source' => 'docker_env',
         ]);
 
-        putenv('MIMO_ADMIN_EMAIL=new@example.com');
-        putenv('MIMO_ADMIN_PASSWORD=new-password');
-
         $this->artisan('mimo:docker-install')
             ->expectsOutput('MimoTTS Docker 已安装，跳过管理员创建。')
             ->assertExitCode(0);
 
         $this->assertSame(1, User::query()->where('is_admin', true)->count());
-        $this->assertDatabaseMissing('users', ['email' => 'new@example.com']);
-        $this->assertTrue(Hash::check('kept-password', (string) $admin->fresh()->password));
     }
 
     public function test_existing_install_syncs_config_only_when_enabled(): void
