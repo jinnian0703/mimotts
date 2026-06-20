@@ -13,7 +13,14 @@ class HealthInstallStatusTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_health_endpoint_reports_core_checks_and_build_info(): void
+    public function test_health_endpoint_requires_admin(): void
+    {
+        $this->getJson('/api/health')
+            ->assertStatus(401)
+            ->assertJsonPath('error.code', 'Unauthenticated');
+    }
+
+    public function test_admin_health_endpoint_reports_core_checks_and_build_info(): void
     {
         $admin = User::factory()->admin()->create();
         SystemSetting::putPlain('installation', [
@@ -27,7 +34,8 @@ class HealthInstallStatusTest extends TestCase
             'sender' => ['address' => 'noreply@example.com'],
         ]);
 
-        $this->getJson('/api/health')
+        $this->actingAs($admin)
+            ->getJson('/api/health')
             ->assertOk()
             ->assertJsonPath('status', 'ok')
             ->assertJsonPath('checks.database.ok', true)
@@ -38,7 +46,7 @@ class HealthInstallStatusTest extends TestCase
             ]);
     }
 
-    public function test_install_status_distinguishes_installed_missing_config(): void
+    public function test_public_install_status_hides_installed_diagnostics(): void
     {
         $admin = User::factory()->admin()->create();
         SystemSetting::putPlain('installation', [
@@ -50,11 +58,17 @@ class HealthInstallStatusTest extends TestCase
             'sender' => ['address' => null],
         ]);
 
-        $this->getJson('/api/install/status')
+        $response = $this->getJson('/api/install/status')
             ->assertOk()
             ->assertJsonPath('installed', true)
-            ->assertJsonPath('install_state', InstallService::STATE_INSTALLED_NEEDS_CONFIG)
-            ->assertJsonFragment(['mimo_api'])
-            ->assertJsonFragment(['email_sender']);
+            ->assertJsonPath('install_state', InstallService::STATE_INSTALLED)
+            ->assertJsonMissing(['mimo_api'])
+            ->assertJsonMissing(['email_sender']);
+
+        $payload = $response->json();
+        $this->assertArrayNotHasKey('build', $payload);
+        $this->assertArrayNotHasKey('deployment', $payload);
+        $this->assertArrayNotHasKey('missing_config', $payload);
+        $this->assertArrayNotHasKey('email_auth', $payload);
     }
 }

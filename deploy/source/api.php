@@ -30,7 +30,19 @@ require $autoload;
 $app = require_once $backend.'/bootstrap/app.php';
 $kernel = $app->make(Kernel::class);
 
-$route = isset($_GET['r']) ? (string) $_GET['r'] : '/install/status';
+if (! isset($_GET['r'])) {
+    http_response_code(404);
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode([
+        'error' => [
+            'code' => 'NotFound',
+            'message' => '接口不存在',
+        ],
+    ], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+$route = (string) $_GET['r'];
 if ($route === '' || $route[0] !== '/') {
     $route = '/'.$route;
 }

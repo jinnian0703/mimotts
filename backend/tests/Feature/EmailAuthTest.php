@@ -30,13 +30,12 @@ class EmailAuthTest extends TestCase
             'sender' => ['address' => 'noreply@example.com'],
         ]);
 
-        $this->getJson('/api/install/status')
+        $response = $this->getJson('/api/install/status')
             ->assertOk()
             ->assertJsonPath('email_login_enabled', true)
-            ->assertJsonPath('linuxdo_configured', false)
-            ->assertJsonPath('email_auth.enabled', true)
-            ->assertJsonPath('email_auth.smtp_configured', true)
-            ->assertJsonPath('email_auth.sender_configured', true);
+            ->assertJsonPath('linuxdo_configured', false);
+
+        $this->assertArrayNotHasKey('email_auth', $response->json());
     }
 
     public function test_linuxdo_redirect_is_rejected_when_connect_is_not_configured(): void

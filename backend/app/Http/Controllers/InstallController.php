@@ -17,12 +17,42 @@ class InstallController
     public function status(InstallService $install, WebInstallService $webInstall): JsonResponse
     {
         try {
-            return response()->json(array_merge($install->status(), $webInstall->status()));
+            $status = array_merge($install->status(), $webInstall->status());
+
+            if ($status['installed'] ?? false) {
+                return response()->json($this->publicInstalledStatus($status));
+            }
+
+            return response()->json($status);
         } catch (Throwable $e) {
             report($e);
 
             if ($this->looksUnmigrated()) {
                 return response()->json($this->uninstalledStatus($webInstall));
+            }
+
+            if ($this->looksAdminBound()) {
+                return response()->json([
+                    'installed' => true,
+                    'install_state' => InstallService::STATE_CONFIG_ERROR,
+                    'installState' => InstallService::STATE_CONFIG_ERROR,
+                    'state_message' => '系统配置读取异常',
+                    'stateMessage' => '系统配置读取异常',
+                    'admin_bound' => true,
+                    'administratorBound' => true,
+                    'linuxdo_configured' => false,
+                    'linuxDoConfigured' => false,
+                    'linuxdo_login_enabled' => false,
+                    'linuxDoLoginEnabled' => false,
+                    'registration_enabled' => false,
+                    'registrationEnabled' => false,
+                    'email_login_enabled' => false,
+                    'email_auth_enabled' => false,
+                    'emailLoginEnabled' => false,
+                    'emailAuthEnabled' => false,
+                    'config_error' => true,
+                    'configError' => true,
+                ]);
             }
 
             return response()->json($this->configErrorStatus($webInstall));
@@ -431,10 +461,59 @@ class InstallController
         ]);
     }
 
+    private function publicInstalledStatus(array $status): array
+    {
+        $installState = InstallService::STATE_INSTALLED;
+        $stateMessage = $this->publicStateMessage($installState);
+        $adminBound = (bool) ($status['admin_bound'] ?? $status['administratorBound'] ?? false);
+        $linuxDoLoginEnabled = (bool) ($status['linuxdo_login_enabled'] ?? $status['linuxDoLoginEnabled'] ?? false);
+        $emailLoginEnabled = (bool) ($status['email_login_enabled'] ?? $status['emailAuthEnabled'] ?? false);
+        $registrationEnabled = (bool) ($status['registration_enabled'] ?? $status['registrationEnabled'] ?? true);
+
+        return [
+            'installed' => true,
+            'install_state' => $installState,
+            'installState' => $installState,
+            'state_message' => $stateMessage,
+            'stateMessage' => $stateMessage,
+            'admin_bound' => $adminBound,
+            'administratorBound' => $adminBound,
+            'linuxdo_configured' => $linuxDoLoginEnabled,
+            'linuxDoConfigured' => $linuxDoLoginEnabled,
+            'linuxdo_login_enabled' => $linuxDoLoginEnabled,
+            'linuxDoLoginEnabled' => $linuxDoLoginEnabled,
+            'registration_enabled' => $registrationEnabled,
+            'registrationEnabled' => $registrationEnabled,
+            'email_login_enabled' => $emailLoginEnabled,
+            'email_auth_enabled' => $emailLoginEnabled,
+            'emailLoginEnabled' => $emailLoginEnabled,
+            'emailAuthEnabled' => $emailLoginEnabled,
+        ];
+    }
+
+    private function publicStateMessage(string $state): string
+    {
+        return [
+            InstallService::STATE_UNINSTALLED => '系统未安装',
+            InstallService::STATE_INSTALLED => '系统已安装',
+            InstallService::STATE_INSTALLED_NEEDS_CONFIG => '系统已安装',
+            InstallService::STATE_CONFIG_ERROR => '系统配置读取异常',
+        ][$state] ?? '系统已安装';
+    }
+
     private function looksUnmigrated(): bool
     {
         try {
             return ! Schema::hasTable('users') || ! Schema::hasTable('system_settings');
+        } catch (Throwable $e) {
+            return false;
+        }
+    }
+
+    private function looksAdminBound(): bool
+    {
+        try {
+            return Schema::hasTable('users') && \App\Models\User::where('is_admin', true)->exists();
         } catch (Throwable $e) {
             return false;
         }

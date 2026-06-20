@@ -21,7 +21,7 @@ Route::get('/csrf-token', function (Request $request): JsonResponse {
         'token' => $request->session()->token(),
     ]);
 });
-Route::get('/health', [HealthController::class, 'show']);
+Route::get('/health', [HealthController::class, 'show'])->middleware(['auth.api', 'admin']);
 Route::get('/basic-info', [AdminOverviewController::class, 'basicInfo']);
 Route::get('/audio-retention', [AdminOverviewController::class, 'audioRetention']);
 Route::get('/site-icons/{filename}', [AdminOverviewController::class, 'siteIcon'])

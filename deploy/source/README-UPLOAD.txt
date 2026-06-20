@@ -42,5 +42,5 @@ backend/bootstrap/cache 需要可写。
 LinuxDo Connect 参数填写后可使用 LinuxDo 登录。
 
 健康检查
-访问 /api.php?r=/health。
+在管理员后台的系统配置中查看，或管理员登录后访问 /api.php?r=/health。
 status=ok 表示正常；degraded 表示缺少业务配置；error 表示数据库、目录权限或 APP_KEY 等关键项异常。

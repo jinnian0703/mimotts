@@ -160,10 +160,10 @@ cd /www/wwwroot/mimo/backend
 php artisan migrate --force
 ```
 
-升级后访问健康检查：
+升级后在管理员后台的系统配置中查看健康检查，或管理员登录后访问：
 
 ```text
 https://mimo.example.com/api.php?r=/health
 ```
 
-返回 `status=ok` 表示数据库、存储目录、APP_KEY、站点 URL、Mimo API 和登录方式都可用；`degraded` 表示有配置缺失；`error` 表示数据库、目录权限或 APP_KEY 这类关键项异常。
+返回 `status=ok` 表示数据库、存储目录、APP_KEY、站点 URL、Mimo API 和登录方式都可用；`degraded` 表示有配置缺失；`error` 表示数据库、目录权限或 APP_KEY 这类关键项异常。未登录或非管理员访问不会返回诊断细节。

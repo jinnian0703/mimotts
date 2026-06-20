@@ -138,13 +138,15 @@ npm run build
 | `/quota/*` | 额度摘要、流水、签到 |
 | `/announcements` | 用户公告 |
 | `/admin/*` | 管理后台 |
-| `/health` | 健康检查 |
+| `/health` | 管理员健康检查 |
 
 源码上传部署下，API 通过根目录 `api.php` 转发：
 
 ```text
 /api.php?r=/mimo/tts
 ```
+
+直接访问 `api.php` 不会返回安装或诊断信息；健康检查需要管理员登录后调用。
 
 Docker 部署下，API 路径为：
 
