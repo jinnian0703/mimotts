@@ -16,6 +16,11 @@ import { FieldHelpLabel } from "@/components/field-help-label"
 import { useCurrentUser } from "@/components/auth-gate"
 import { PageHeading } from "@/components/page-heading"
 import { api } from "@/lib/api"
+import {
+  formatChinaDateTime,
+  parseChinaTimestamp,
+  toChinaDateTimeLocalValue,
+} from "@/lib/china-time"
 import type {
   Announcement,
   AnnouncementAudience,
@@ -90,29 +95,20 @@ const emptyDraft: AnnouncementDraft = {
 }
 
 function toDateTimeLocalValue(value?: string | null) {
-  return value ? value.replace(" ", "T").slice(0, 16) : ""
+  return toChinaDateTimeLocalValue(value)
 }
 
 function formatDateTime(value?: string | null) {
-  if (!value) {
-    return "-"
-  }
-
-  const date = new Date(value.replace(" ", "T"))
-  if (Number.isNaN(date.getTime())) {
-    return value
-  }
-
-  return date.toLocaleString("zh-CN", { hour12: false })
+  return formatChinaDateTime(value)
 }
 
 function statusLabel(announcement: Announcement) {
   const now = Date.now()
   const startsAt = announcement.startsAt
-    ? new Date(announcement.startsAt.replace(" ", "T")).getTime()
+    ? parseChinaTimestamp(announcement.startsAt)
     : null
   const endsAt = announcement.endsAt
-    ? new Date(announcement.endsAt.replace(" ", "T")).getTime()
+    ? parseChinaTimestamp(announcement.endsAt)
     : null
 
   if (!announcement.active) {

@@ -28,6 +28,7 @@ import { toast } from "sonner"
 import { useCurrentUser } from "@/components/auth-gate"
 import { PageHeading } from "@/components/page-heading"
 import { StatusBadge } from "@/components/status-badge"
+import { formatChinaDateTime } from "@/lib/china-time"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -161,7 +162,7 @@ export default function DashboardPage() {
     setUpdatedAt(
       data.updatedAt ??
         data.updated_at ??
-        new Date().toLocaleString("zh-CN", { hour12: false })
+        formatChinaDateTime(new Date())
     )
   }
 

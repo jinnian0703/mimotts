@@ -9,6 +9,7 @@ use App\Services\AuditLogger;
 use App\Services\EmailVerificationService;
 use App\Services\InstallService;
 use App\Services\LinuxDoOAuthService;
+use App\Support\DisplayTime;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -201,9 +202,7 @@ class AccountController
 
         return response()->json([
             'sent' => true,
-            'expires_at' => $freshUser->two_factor_expires_at
-                ? $freshUser->two_factor_expires_at->toDateTimeString()
-                : null,
+            'expires_at' => DisplayTime::format($freshUser->two_factor_expires_at),
         ]);
     }
 

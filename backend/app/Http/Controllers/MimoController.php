@@ -10,6 +10,7 @@ use App\Services\AudioJobPayloadSummary;
 use App\Services\AudioRetentionService;
 use App\Services\AuditLogger;
 use App\Services\MimoClient;
+use App\Support\DisplayTime;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -364,10 +365,7 @@ class MimoController
             return null;
         }
 
-        return $value
-            ->copy()
-            ->timezone(config('app.task_timezone', 'Asia/Shanghai'))
-            ->format('Y-m-d H:i:s');
+        return DisplayTime::format($value);
     }
 
     private function moduleForType(string $type): string

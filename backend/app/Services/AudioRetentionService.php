@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\AudioJob;
 use App\Models\SystemSetting;
+use App\Support\DisplayTime;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
@@ -83,7 +84,7 @@ class AudioRetentionService
                 }
             });
 
-        $config['last_pruned_at'] = Carbon::now()->toDateTimeString();
+        $config['last_pruned_at'] = DisplayTime::now();
         $config['last_pruned_count'] = $deletedJobs;
         SystemSetting::putPlain(self::KEY, $config);
 
@@ -91,7 +92,7 @@ class AudioRetentionService
             'enabled' => true,
             'deleted_jobs' => $deletedJobs,
             'deleted_files' => $deletedFiles,
-            'cutoff' => $cutoff->toDateTimeString(),
+            'cutoff' => DisplayTime::format($cutoff),
         ];
     }
 

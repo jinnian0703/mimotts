@@ -40,6 +40,7 @@ import { toast } from "sonner"
 import { FieldHelpLabel } from "@/components/field-help-label"
 import { useCurrentUser } from "@/components/auth-gate"
 import { PageHeading } from "@/components/page-heading"
+import { formatChinaDateTime } from "@/lib/china-time"
 import { api } from "@/lib/api"
 import type {
   BasicInfoConfig,
@@ -882,7 +883,10 @@ export default function SystemSettingsPage() {
     },
   ]
   const buildInfo = health?.build ?? basicInfo.build
-  const builtAt = buildInfo?.builtAt ?? buildInfo?.built_at ?? "未记录"
+  const builtAt = formatChinaDateTime(
+    buildInfo?.builtAt ?? buildInfo?.built_at ?? null,
+    "未记录"
+  )
   const deploymentMode = updateStatus?.deployment?.mode ?? "source"
   const healthTone = health?.status === "ok" ? "positive" : "neutral"
   const healthLabel = {

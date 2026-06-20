@@ -7,6 +7,7 @@ use App\Services\InstallService;
 use App\Services\MailConfigService;
 use App\Services\MimoConfigService;
 use App\Services\WebInstallService;
+use App\Support\DisplayTime;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Schema;
@@ -368,7 +369,7 @@ class InstallController
                 $emailConfig,
                 $recipient,
                 '邮件投递测试',
-                "邮件投递测试发送成功。\n\n时间：".now()->timezone(config('app.task_timezone', 'Asia/Shanghai'))->format('Y-m-d H:i:s')
+                "邮件投递测试发送成功。\n\n时间：".DisplayTime::now()
             );
         } catch (Throwable $e) {
             report($e);

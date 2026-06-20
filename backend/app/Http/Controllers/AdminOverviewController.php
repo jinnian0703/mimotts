@@ -14,11 +14,12 @@ use App\Services\BillingConfigService;
 use App\Services\InstallService;
 use App\Services\MimoConfigService;
 use App\Services\QuotaService;
+use App\Support\DisplayTime;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use RuntimeException;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use RuntimeException;
 
 class AdminOverviewController
 {
@@ -52,7 +53,7 @@ class AdminOverviewController
                 'mimo' => $isAdmin ? $mimo->publicSystemConfig() : null,
                 'email' => $isAdmin ? $this->dashboardEmailConfig($install->emailAuthConfig()) : null,
                 'settings' => $isAdmin ? ['total' => SystemSetting::query()->count()] : null,
-                'updated_at' => now()->timezone(config('app.task_timezone', 'Asia/Shanghai'))->format('Y-m-d H:i:s'),
+                'updated_at' => DisplayTime::now(),
             ],
         ]);
     }
@@ -71,11 +72,11 @@ class AdminOverviewController
                     'status' => $user->status ?: 'active',
                     'planId' => $user->plan_id,
                     'quotaBalance' => (int) $user->quota_balance,
-                    'emailVerifiedAt' => $user->email_verified_at ? $user->email_verified_at->toDateTimeString() : null,
+                    'emailVerifiedAt' => DisplayTime::format($user->email_verified_at),
                     'avatarUrl' => $user->avatar_url,
                     'linuxdoId' => $user->linuxdo_id,
-                    'lastLoginAt' => $user->last_login_at ? $user->last_login_at->toDateTimeString() : null,
-                    'createdAt' => $user->created_at ? $user->created_at->toDateTimeString() : null,
+                    'lastLoginAt' => DisplayTime::format($user->last_login_at),
+                    'createdAt' => DisplayTime::format($user->created_at),
                 ])
                 ->values(),
         ]);
@@ -272,7 +273,7 @@ class AdminOverviewController
                     'actor' => $log->user ? $log->user->name : '系统',
                     'action' => $log->action,
                     'target' => trim(($log->resource_type ?? '').' '.($log->resource_id ?? '')),
-                    'createdAt' => $log->created_at ? $log->created_at->toDateTimeString() : null,
+                    'createdAt' => DisplayTime::format($log->created_at),
                 ])
                 ->values(),
         ]);
@@ -287,7 +288,7 @@ class AdminOverviewController
                 ->map(fn (SystemSetting $setting) => [
                     'key' => $setting->key,
                     'value' => $setting->is_encrypted ? '[encrypted]' : json_encode($setting->value, JSON_UNESCAPED_UNICODE),
-                    'updatedAt' => $setting->updated_at ? $setting->updated_at->toDateTimeString() : null,
+                    'updatedAt' => DisplayTime::format($setting->updated_at),
                 ])
                 ->values(),
         ]);
@@ -508,11 +509,11 @@ class AdminOverviewController
             'status' => $user->status ?: 'active',
             'planId' => $user->plan_id,
             'quotaBalance' => (int) $user->quota_balance,
-            'emailVerifiedAt' => $user->email_verified_at ? $user->email_verified_at->toDateTimeString() : null,
+            'emailVerifiedAt' => DisplayTime::format($user->email_verified_at),
             'avatarUrl' => $user->avatar_url,
             'linuxdoId' => $user->linuxdo_id,
-            'lastLoginAt' => $user->last_login_at ? $user->last_login_at->toDateTimeString() : null,
-            'createdAt' => $user->created_at ? $user->created_at->toDateTimeString() : null,
+            'lastLoginAt' => DisplayTime::format($user->last_login_at),
+            'createdAt' => DisplayTime::format($user->created_at),
         ];
     }
 
@@ -651,10 +652,7 @@ class AdminOverviewController
             return null;
         }
 
-        return $value
-            ->copy()
-            ->timezone(config('app.task_timezone', 'Asia/Shanghai'))
-            ->format('Y-m-d H:i:s');
+        return DisplayTime::format($value);
     }
 
     private function moduleForType(string $type): string

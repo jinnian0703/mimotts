@@ -6,6 +6,7 @@ use App\Exceptions\InsufficientQuotaException;
 use App\Models\AudioJob;
 use App\Models\QuotaLedgerEntry;
 use App\Models\User;
+use App\Support\DisplayTime;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
@@ -378,9 +379,7 @@ class QuotaService
             'description' => $entry->description,
             'metadata' => $entry->metadata ?? [],
             'audioJobId' => $entry->audio_job_id ? (string) $entry->audio_job_id : null,
-            'createdAt' => $entry->created_at
-                ? $entry->created_at->copy()->timezone(config('app.task_timezone', 'Asia/Shanghai'))->format('Y-m-d H:i:s')
-                : null,
+            'createdAt' => DisplayTime::format($entry->created_at),
         ];
     }
 

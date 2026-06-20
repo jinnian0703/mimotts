@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Announcement;
 use App\Services\AuditLogger;
+use App\Support\DisplayTime;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -77,7 +78,7 @@ class AnnouncementController
 
     private function validated(Request $request): array
     {
-        return $request->validate([
+        $data = $request->validate([
             'title' => ['required', 'string', 'max:160'],
             'content' => ['required', 'string', 'max:5000'],
             'level' => ['required', Rule::in(['info', 'success', 'warning', 'destructive'])],
@@ -86,6 +87,16 @@ class AnnouncementController
             'starts_at' => ['nullable', 'date'],
             'ends_at' => ['nullable', 'date', 'after_or_equal:starts_at'],
         ]);
+
+        if (array_key_exists('starts_at', $data)) {
+            $data['starts_at'] = DisplayTime::storageFormat($data['starts_at']);
+        }
+
+        if (array_key_exists('ends_at', $data)) {
+            $data['ends_at'] = DisplayTime::storageFormat($data['ends_at']);
+        }
+
+        return $data;
     }
 
     private function serializeAnnouncement(Announcement $announcement): array
@@ -97,10 +108,10 @@ class AnnouncementController
             'level' => $announcement->level,
             'audience' => $announcement->audience,
             'active' => (bool) $announcement->active,
-            'startsAt' => $announcement->starts_at ? $announcement->starts_at->toDateTimeString() : null,
-            'endsAt' => $announcement->ends_at ? $announcement->ends_at->toDateTimeString() : null,
-            'createdAt' => $announcement->created_at ? $announcement->created_at->toDateTimeString() : null,
-            'updatedAt' => $announcement->updated_at ? $announcement->updated_at->toDateTimeString() : null,
+            'startsAt' => DisplayTime::format($announcement->starts_at),
+            'endsAt' => DisplayTime::format($announcement->ends_at),
+            'createdAt' => DisplayTime::format($announcement->created_at),
+            'updatedAt' => DisplayTime::format($announcement->updated_at),
         ];
     }
 }
