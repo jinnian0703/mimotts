@@ -7,7 +7,6 @@ import {
   IconCheck,
   IconCircleCheck,
   IconLoader2,
-  IconSettings,
 } from "@tabler/icons-react"
 import { toast } from "sonner"
 
@@ -155,16 +154,6 @@ export default function InstallPage() {
     }
   }, [])
 
-  useEffect(() => {
-    const installed =
-      installStatus?.installed === true &&
-      (installStatus.administratorBound ?? installStatus.admin_bound ?? true)
-
-    if (!statusLoading && installed) {
-      router.replace("/login")
-    }
-  }, [installStatus, router, statusLoading])
-
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setPending(true)
@@ -284,8 +273,6 @@ export default function InstallPage() {
 
   const installState =
     installStatus?.installState ?? installStatus?.install_state ?? "uninstalled"
-  const missingConfig =
-    installStatus?.missingConfig ?? installStatus?.missing_config ?? []
   const showInstallForm =
     statusLoading || installState === "uninstalled"
 
@@ -295,7 +282,6 @@ export default function InstallPage() {
         <InstallStatePanel
           status={installStatus}
           loading={statusLoading}
-          onLogin={() => router.replace("/login")}
         />
       </div>
 
@@ -873,49 +859,28 @@ export default function InstallPage() {
         <div className="mx-auto w-full max-w-6xl">
           <Card>
             <CardHeader>
-              <CardTitle>
-                {installState === "installed_needs_config"
-                  ? "安装已完成，仍需补齐配置"
-                  : installState === "config_error"
-                    ? "配置异常"
-                    : "系统已安装"}
-              </CardTitle>
+              <CardTitle>安装入口已关闭</CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="grid gap-3 md:grid-cols-3">
+            <CardContent className="space-y-4">
+              <Alert>
+                <IconCircleCheck />
+                <AlertTitle>系统已完成安装</AlertTitle>
+                <AlertDescription>
+                  为避免重复安装，当前安装入口不再开放。
+                </AlertDescription>
+              </Alert>
+              <div className="grid gap-3 md:grid-cols-2">
                 <InstallStateTile
                   label="安装状态"
-                  value={stateLabel(installState)}
-                />
-                <InstallStateTile
-                  label="版本"
-                  value={installStatus?.build?.version || "dev"}
-                />
-                <InstallStateTile
-                  label="构建时间"
                   value={
-                    installStatus?.build?.builtAt ??
-                    installStatus?.build?.built_at ??
-                    "未记录"
+                    installState === "config_error"
+                      ? "配置异常"
+                      : "已安装"
                   }
                 />
+                <InstallStateTile label="入口状态" value="已关闭" />
               </div>
-              {missingConfig.length > 0 && (
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {missingConfig.map((item) => (
-                    <Badge key={item} variant="outline">
-                      {missingConfigLabel(item)}
-                    </Badge>
-                  ))}
-                </div>
-              )}
             </CardContent>
-            <CardFooter className="justify-end">
-              <Button onClick={() => router.replace("/login")}>
-                <IconSettings data-icon="inline-start" />
-                进入登录页
-              </Button>
-            </CardFooter>
           </Card>
         </div>
       )}
@@ -926,11 +891,9 @@ export default function InstallPage() {
 function InstallStatePanel({
   status,
   loading,
-  onLogin,
 }: {
   status: InstallStatus | null
   loading: boolean
-  onLogin: () => void
 }) {
   if (loading) {
     return (
@@ -978,11 +941,8 @@ function InstallStatePanel({
         <IconCircleCheck />
         <AlertTitle>系统已安装</AlertTitle>
         <AlertDescription>
-          当前版本 {status?.build?.version || "dev"}，可直接进入登录页。
+          安装入口已关闭，不能重复安装。
         </AlertDescription>
-        <Button size="sm" variant="outline" className="absolute right-2 top-2" onClick={onLogin}>
-          登录
-        </Button>
       </Alert>
     )
   }
@@ -1011,15 +971,6 @@ function InstallStateTile({
       </div>
     </div>
   )
-}
-
-function stateLabel(state: string) {
-  return {
-    uninstalled: "未安装",
-    installed: "已安装",
-    installed_needs_config: "已安装但缺配置",
-    config_error: "配置异常",
-  }[state] ?? state
 }
 
 function missingConfigLabel(key: string) {
