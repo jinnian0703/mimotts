@@ -28,7 +28,6 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { api } from "@/lib/api"
 import { clearSession } from "@/lib/session"
 import { cn } from "@/lib/utils"
@@ -114,7 +113,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       >
         <div
           className={cn(
-            "flex items-start gap-2",
+            "flex items-center gap-2.5",
             desktopNavCollapsed && "flex-col items-center"
           )}
         >
@@ -129,7 +128,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <BrandIcon iconUrl={brand.iconUrl} />
             {!desktopNavCollapsed && (
               <div className="min-w-0">
-                <span className="font-heading text-xl font-semibold">
+                <span className="block truncate font-heading text-xl font-semibold">
                   {brand.name}
                 </span>
               </div>
@@ -138,13 +137,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
           <div
             className={cn(
-              "flex items-center gap-1",
-              desktopNavCollapsed ? "flex-col" : "ml-auto"
+              "flex shrink-0 items-center gap-1",
+              desktopNavCollapsed && "flex-col"
             )}
           >
             <ThemeToggle
               compact
-              tooltip={!desktopNavCollapsed}
+              tooltip={false}
               className={desktopNavCollapsed ? "size-9" : "size-8"}
               iconClassName={desktopNavCollapsed ? "size-5" : undefined}
             />
@@ -165,26 +164,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 </a>
               </Button>
             ) : (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    asChild
-                    variant="outline"
-                    size="icon"
-                    className="size-8"
-                    aria-label="打开 GitHub 仓库"
-                  >
-                    <a
-                      href={repositoryUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      <IconBrandGithub className="size-4" />
-                    </a>
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="right">GitHub 仓库</TooltipContent>
-              </Tooltip>
+              <Button
+                asChild
+                variant="outline"
+                size="icon"
+                className="size-8"
+                aria-label="打开 GitHub 仓库"
+              >
+                <a
+                  href={repositoryUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <IconBrandGithub className="size-4" />
+                </a>
+              </Button>
             )}
             {desktopNavCollapsed ? (
               <Button
@@ -197,20 +191,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <IconChevronsRight className="size-5" />
               </Button>
             ) : (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    className="size-8"
-                    onClick={() => setDesktopNavCollapsed(true)}
-                    aria-label="收起侧边栏"
-                  >
-                    <IconChevronsLeft className="size-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="right">收起侧边栏</TooltipContent>
-              </Tooltip>
+              <Button
+                variant="outline"
+                size="icon"
+                className="size-8"
+                onClick={() => setDesktopNavCollapsed(true)}
+                aria-label="收起侧边栏"
+              >
+                <IconChevronsLeft className="size-4" />
+              </Button>
             )}
           </div>
         </div>
@@ -342,26 +331,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </div>
             </div>
             <div className="flex items-center gap-1">
-              <ThemeToggle compact />
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    asChild
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label="打开 GitHub 仓库"
-                  >
-                    <a
-                      href={repositoryUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      <IconBrandGithub />
-                    </a>
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom">GitHub 仓库</TooltipContent>
-              </Tooltip>
+              <ThemeToggle compact tooltip={false} />
+              <Button
+                asChild
+                variant="ghost"
+                size="icon-sm"
+                aria-label="打开 GitHub 仓库"
+              >
+                <a
+                  href={repositoryUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <IconBrandGithub />
+                </a>
+              </Button>
               <Button
                 variant="ghost"
                 size="icon-sm"
