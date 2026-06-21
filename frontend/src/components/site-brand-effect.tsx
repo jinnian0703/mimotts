@@ -5,8 +5,9 @@ import { useEffect } from "react"
 import { api } from "@/lib/api"
 import {
   normalizeSiteBrand,
+  publishSiteBrand,
   resolveSiteIconUrl,
-  writeCachedSiteBrand,
+  subscribeSiteBrand,
 } from "@/lib/site-brand"
 
 function ensureIconLink(rel: string) {
@@ -34,6 +35,13 @@ function applySiteIcon(iconUrl: string) {
 
 export function SiteBrandEffect() {
   useEffect(() => {
+    return subscribeSiteBrand((brand) => {
+      document.title = brand.name
+      applySiteIcon(brand.iconUrl)
+    })
+  }, [])
+
+  useEffect(() => {
     let cancelled = false
 
     api
@@ -47,7 +55,7 @@ export function SiteBrandEffect() {
 
         document.title = brand.name
         applySiteIcon(brand.iconUrl)
-        writeCachedSiteBrand(brand)
+        publishSiteBrand(brand)
       })
       .catch(() => undefined)
 

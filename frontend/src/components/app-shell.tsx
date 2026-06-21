@@ -34,9 +34,10 @@ import {
   defaultSiteBrand,
   fallbackSiteIconUrl,
   normalizeSiteBrand,
+  publishSiteBrand,
   readCachedSiteBrand,
   resolveSiteIconUrl,
-  writeCachedSiteBrand,
+  subscribeSiteBrand,
 } from "@/lib/site-brand"
 import { cn } from "@/lib/utils"
 
@@ -96,7 +97,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
         const nextBrand = normalizeSiteBrand(config)
         setBrandState({ brand: nextBrand, loaded: true })
-        writeCachedSiteBrand(nextBrand)
+        publishSiteBrand(nextBrand)
       })
       .catch(() => {
         if (!cancelled) {
@@ -110,6 +111,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       cancelled = true
     }
   }, [isPublic])
+
+  useEffect(() => {
+    return subscribeSiteBrand((nextBrand) => {
+      setBrandState({ brand: nextBrand, loaded: true })
+    })
+  }, [])
 
   async function handleLogout() {
     await api.logout().catch(() => undefined)
@@ -422,6 +429,34 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 )
               })}
           </nav>
+
+          <div className="mt-4 flex shrink-0 flex-col gap-4 border-t border-border/70 pt-4">
+            <div className="flex items-center gap-3 px-2">
+              <Avatar className="size-11">
+                {user?.avatarUrl && (
+                  <AvatarImage src={user.avatarUrl} alt={user.name} />
+                )}
+                <AvatarFallback>{initials}</AvatarFallback>
+              </Avatar>
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-[15px] font-medium">
+                  {user?.name ?? "未加载"}
+                </div>
+                <div className="text-sm text-muted-foreground">
+                  {user?.role === "admin" ? "管理员" : "用户"}
+                </div>
+              </div>
+              {user?.role === "admin" && <Badge variant="secondary">Admin</Badge>}
+            </div>
+            <Button
+              variant="outline"
+              className="h-10 text-[15px]"
+              onClick={handleLogout}
+            >
+              <IconLogout data-icon="inline-start" className="size-5" />
+              退出
+            </Button>
+          </div>
 
         </aside>
       </div>

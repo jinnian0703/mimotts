@@ -42,7 +42,11 @@ import { useCurrentUser } from "@/components/auth-gate"
 import { PageHeading } from "@/components/page-heading"
 import { formatChinaDateTime } from "@/lib/china-time"
 import { api } from "@/lib/api"
-import { resolveSiteIconUrl } from "@/lib/site-brand"
+import {
+  normalizeSiteBrand,
+  publishSiteBrand,
+  resolveSiteIconUrl,
+} from "@/lib/site-brand"
 import type {
   BasicInfoConfig,
   AudioRetentionConfig,
@@ -546,7 +550,9 @@ export default function SystemSettingsPage() {
 
     try {
       const saved = await api.saveAdminBasicInfo(basicInfo)
-      setBasicInfo(mergeBasicInfo(saved))
+      const merged = mergeBasicInfo(saved)
+      setBasicInfo(merged)
+      publishSiteBrand(normalizeSiteBrand(merged))
       toast.success("基础信息已保存")
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "基础信息保存失败")
@@ -569,7 +575,9 @@ export default function SystemSettingsPage() {
 
     try {
       const saved = await api.uploadAdminBasicIcon(file)
-      setBasicInfo(mergeBasicInfo(saved))
+      const merged = mergeBasicInfo(saved)
+      setBasicInfo(merged)
+      publishSiteBrand(normalizeSiteBrand(merged))
       toast.success("站点图标已上传")
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "站点图标上传失败")

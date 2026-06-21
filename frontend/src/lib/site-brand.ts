@@ -8,6 +8,7 @@ export const defaultSiteBrand = {
 }
 
 const cacheKey = "mimotts:site-brand"
+const changeEventName = "mimotts:site-brand-change"
 
 export type SiteBrand = typeof defaultSiteBrand
 
@@ -54,4 +55,27 @@ export function writeCachedSiteBrand(brand: SiteBrand) {
   } catch {
     return
   }
+}
+
+export function publishSiteBrand(brand: SiteBrand) {
+  if (typeof window === "undefined") {
+    return
+  }
+
+  writeCachedSiteBrand(brand)
+  window.dispatchEvent(new CustomEvent<SiteBrand>(changeEventName, { detail: brand }))
+}
+
+export function subscribeSiteBrand(listener: (brand: SiteBrand) => void) {
+  if (typeof window === "undefined") {
+    return () => undefined
+  }
+
+  const handler = (event: Event) => {
+    listener((event as CustomEvent<SiteBrand>).detail)
+  }
+
+  window.addEventListener(changeEventName, handler)
+
+  return () => window.removeEventListener(changeEventName, handler)
 }
