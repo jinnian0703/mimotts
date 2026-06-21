@@ -84,6 +84,7 @@ Route::middleware(['auth.api', 'admin'])->group(function (): void {
     Route::put('/admin/audio-retention', [AdminOverviewController::class, 'updateAudioRetention']);
     Route::get('/admin/users', [AdminOverviewController::class, 'users']);
     Route::put('/admin/users/{user}', [AdminOverviewController::class, 'updateUser']);
+    Route::delete('/admin/users/{user}', [AdminOverviewController::class, 'removeDeletedUser']);
     Route::post('/admin/users/{user}/quota-adjustments', [AdminOverviewController::class, 'adjustQuota']);
     Route::post('/admin/users/bulk', [AdminOverviewController::class, 'bulkUsers']);
     Route::get('/admin/jobs', [AdminOverviewController::class, 'allJobs']);

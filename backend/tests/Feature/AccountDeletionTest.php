@@ -80,6 +80,37 @@ class AccountDeletionTest extends TestCase
             ->assertJsonPath('error.message', '账号已注销');
     }
 
+    public function test_admin_can_permanently_remove_deleted_user_only(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $activeUser = User::factory()->create([
+            'email' => 'active@example.com',
+            'status' => User::STATUS_ACTIVE,
+        ]);
+        $deletedUser = User::factory()->create([
+            'email' => 'removed@example.com',
+            'status' => User::STATUS_DELETED,
+        ]);
+
+        $this->actingAs($admin)
+            ->deleteJson('/api/admin/users/'.$activeUser->id)
+            ->assertStatus(422)
+            ->assertJsonPath('error.code', 'AccountNotDeleted');
+
+        $this->assertDatabaseHas('users', [
+            'id' => $activeUser->id,
+        ]);
+
+        $this->actingAs($admin)
+            ->deleteJson('/api/admin/users/'.$deletedUser->id)
+            ->assertOk()
+            ->assertJsonPath('removed_id', (string) $deletedUser->id);
+
+        $this->assertDatabaseMissing('users', [
+            'id' => $deletedUser->id,
+        ]);
+    }
+
     private function markInstalled(User $admin): void
     {
         SystemSetting::putPlain('installation', [

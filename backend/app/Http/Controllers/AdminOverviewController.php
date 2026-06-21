@@ -226,6 +226,35 @@ class AdminOverviewController
         ]);
     }
 
+    public function removeDeletedUser(
+        Request $request,
+        User $user,
+        AccountDeletionService $deletion,
+        AuditLogger $audit
+    ): JsonResponse {
+        if (! $user->isDeleted()) {
+            return response()->json([
+                'error' => [
+                    'code' => 'AccountNotDeleted',
+                    'message' => '只能移除已注销账号',
+                ],
+            ], 422);
+        }
+
+        $deletedId = (string) $user->id;
+
+        $audit->record($request, 'account.remove_deleted.admin', 'user', $user->id, [
+            'target_email' => $user->email,
+            'target_name' => $user->name,
+        ]);
+        $deletion->markDeleted($user);
+        $user->delete();
+
+        return response()->json([
+            'removed_id' => $deletedId,
+        ]);
+    }
+
     public function bulkUsers(Request $request, BillingConfigService $billing, QuotaService $quota): JsonResponse
     {
         $planIds = $this->planIds($billing);

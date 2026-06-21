@@ -67,6 +67,7 @@ type AnnouncementDraft = {
   level: AnnouncementLevel
   audience: AnnouncementAudience
   active: boolean
+  show_popup: boolean
   starts_at: string
   ends_at: string
 }
@@ -90,6 +91,7 @@ const emptyDraft: AnnouncementDraft = {
   level: "info",
   audience: "all",
   active: true,
+  show_popup: true,
   starts_at: "",
   ends_at: "",
 }
@@ -178,6 +180,7 @@ export default function AnnouncementsPage() {
       level: announcement.level,
       audience: announcement.audience,
       active: announcement.active,
+      show_popup: announcement.showPopup !== false,
       starts_at: toDateTimeLocalValue(announcement.startsAt),
       ends_at: toDateTimeLocalValue(announcement.endsAt),
     })
@@ -206,6 +209,7 @@ export default function AnnouncementsPage() {
         level: draft.level,
         audience: draft.audience,
         active: draft.active,
+        show_popup: draft.show_popup,
         starts_at: draft.starts_at || null,
         ends_at: draft.ends_at || null,
       }
@@ -288,6 +292,7 @@ export default function AnnouncementsPage() {
                   <TableHead>等级</TableHead>
                   <TableHead>范围</TableHead>
                   <TableHead>状态</TableHead>
+                  <TableHead>弹窗</TableHead>
                   <TableHead>时间</TableHead>
                   <TableHead className="text-right">操作</TableHead>
                 </TableRow>
@@ -328,6 +333,17 @@ export default function AnnouncementsPage() {
                           }
                         >
                           {currentStatus}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={
+                            announcement.showPopup === false
+                              ? "outline"
+                              : "secondary"
+                          }
+                        >
+                          {announcement.showPopup === false ? "不弹窗" : "弹窗"}
                         </Badge>
                       </TableCell>
                       <TableCell className="min-w-48 text-xs text-muted-foreground">
@@ -545,6 +561,21 @@ export default function AnnouncementsPage() {
                   setDraft((current) => ({
                     ...current,
                     active,
+                  }))
+                }
+              />
+            </Field>
+
+            <Field orientation="horizontal">
+              <FieldContent>
+                <FieldTitle>弹窗提醒</FieldTitle>
+              </FieldContent>
+              <Switch
+                checked={draft.show_popup}
+                onCheckedChange={(show_popup) =>
+                  setDraft((current) => ({
+                    ...current,
+                    show_popup,
                   }))
                 }
               />

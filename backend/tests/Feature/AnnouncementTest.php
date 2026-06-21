@@ -22,6 +22,7 @@ class AnnouncementTest extends TestCase
             'level' => 'warning',
             'audience' => 'all',
             'active' => true,
+            'show_popup' => false,
         ]);
 
         Announcement::create([
@@ -45,7 +46,9 @@ class AnnouncementTest extends TestCase
             ->getJson('/api/announcements')
             ->assertOk()
             ->assertJsonCount(1, 'announcements')
-            ->assertJsonPath('announcements.0.title', '系统维护');
+            ->assertJsonPath('announcements.0.title', '系统维护')
+            ->assertJsonPath('announcements.0.show_popup', false)
+            ->assertJsonPath('announcements.0.showPopup', false);
 
         $this->actingAs($admin)
             ->getJson('/api/announcements')
@@ -64,9 +67,11 @@ class AnnouncementTest extends TestCase
                 'level' => 'success',
                 'audience' => 'all',
                 'active' => true,
+                'show_popup' => false,
             ])
             ->assertCreated()
             ->assertJsonPath('announcement.title', '版本更新')
+            ->assertJsonPath('announcement.show_popup', false)
             ->json('announcement');
 
         $this->actingAs($admin)
@@ -76,9 +81,11 @@ class AnnouncementTest extends TestCase
                 'level' => 'info',
                 'audience' => 'user',
                 'active' => false,
+                'show_popup' => true,
             ])
             ->assertOk()
             ->assertJsonPath('announcement.active', false)
+            ->assertJsonPath('announcement.showPopup', true)
             ->assertJsonPath('announcement.audience', 'user');
 
         $this->actingAs($admin)

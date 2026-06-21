@@ -337,6 +337,8 @@ export type Announcement = {
   level: AnnouncementLevel
   audience: AnnouncementAudience
   active: boolean
+  showPopup?: boolean
+  show_popup?: boolean
   startsAt?: string | null
   starts_at?: string | null
   endsAt?: string | null

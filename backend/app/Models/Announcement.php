@@ -14,6 +14,7 @@ class Announcement extends Model
         'level',
         'audience',
         'active',
+        'show_popup',
         'starts_at',
         'ends_at',
         'created_by',
@@ -22,6 +23,7 @@ class Announcement extends Model
 
     protected $casts = [
         'active' => 'boolean',
+        'show_popup' => 'boolean',
         'starts_at' => 'datetime',
         'ends_at' => 'datetime',
     ];

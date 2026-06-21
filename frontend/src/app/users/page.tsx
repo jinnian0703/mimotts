@@ -8,6 +8,7 @@ import {
   IconReceipt2,
   IconRefresh,
   IconSearch,
+  IconTrash,
   IconUsers,
 } from "@tabler/icons-react"
 import { toast } from "sonner"
@@ -29,6 +30,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -90,6 +92,7 @@ export default function UsersPage() {
   const [billing, setBilling] = useState<BillingConfig | null>(null)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [editing, setEditing] = useState<UserDraft | null>(null)
+  const [removing, setRemoving] = useState<User | null>(null)
   const [quotaAdjusting, setQuotaAdjusting] =
     useState<QuotaAdjustmentDraft | null>(null)
   const [bulkPlanId, setBulkPlanId] = useState("")
@@ -294,6 +297,30 @@ export default function UsersPage() {
       toast.success("用户已保存")
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "用户保存失败")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function removeDeletedUser() {
+    if (!removing) {
+      return
+    }
+
+    setSaving(true)
+
+    try {
+      const removedId = await api.removeDeletedUser(removing.id)
+      setUsers((current) => current.filter((user) => user.id !== removedId))
+      setSelectedIds((current) => current.filter((id) => id !== removedId))
+      setUserPagination((current) => ({
+        ...current,
+        total: Math.max(0, current.total - 1),
+      }))
+      setRemoving(null)
+      toast.success("已注销用户已移除")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "用户移除失败")
     } finally {
       setSaving(false)
     }
@@ -612,22 +639,35 @@ export default function UsersPage() {
                         <TableCell>{user.linuxdoId ? "已绑定" : "未绑定"}</TableCell>
                         <TableCell>{user.lastLoginAt ?? "-"}</TableCell>
                         <TableCell className="text-right">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => openQuotaAdjustment(user)}
-                            disabled={!manageable}
-                          >
-                            额度
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => openEdit(user)}
-                            disabled={!manageable}
-                          >
-                            编辑
-                          </Button>
+                          {status === "deleted" ? (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setRemoving(user)}
+                            >
+                              <IconTrash data-icon="inline-start" />
+                              移除
+                            </Button>
+                          ) : (
+                            <>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => openQuotaAdjustment(user)}
+                                disabled={!manageable}
+                              >
+                                额度
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => openEdit(user)}
+                                disabled={!manageable}
+                              >
+                                编辑
+                              </Button>
+                            </>
+                          )}
                         </TableCell>
                       </TableRow>
                     )
@@ -777,6 +817,39 @@ export default function UsersPage() {
                 <IconDeviceFloppy data-icon="inline-start" />
               )}
               保存
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!removing} onOpenChange={(open) => !open && setRemoving(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>移除已注销用户</DialogTitle>
+            <DialogDescription>
+              移除后该用户将从用户管理中删除，不能恢复。
+            </DialogDescription>
+          </DialogHeader>
+          {removing && (
+            <div className="rounded-xl border border-border/70 px-4 py-3">
+              <div className="text-sm text-muted-foreground">已注销账号</div>
+              <div className="mt-1 font-medium">{removing.name}</div>
+              <div className="mt-1 text-sm text-muted-foreground">
+                {removing.email ?? "未绑定邮箱"}
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRemoving(null)} disabled={saving}>
+              取消
+            </Button>
+            <Button variant="destructive" onClick={removeDeletedUser} disabled={saving}>
+              {saving ? (
+                <IconLoader2 data-icon="inline-start" />
+              ) : (
+                <IconTrash data-icon="inline-start" />
+              )}
+              确认移除
             </Button>
           </DialogFooter>
         </DialogContent>

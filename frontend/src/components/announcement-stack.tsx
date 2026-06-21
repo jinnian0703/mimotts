@@ -159,6 +159,9 @@ export function AnnouncementStack() {
       .then((nextAnnouncements) => {
         if (mounted) {
           const sortedAnnouncements = sortAnnouncements(nextAnnouncements)
+          const popupAnnouncements = sortedAnnouncements.filter(
+            (announcement) => announcement.showPopup !== false
+          )
 
           setAnnouncements(sortedAnnouncements)
           setActiveIndex((current) =>
@@ -166,7 +169,7 @@ export function AnnouncementStack() {
           )
           setReminderIndex(0)
           setReminderOpen(
-            sortedAnnouncements.length > 0 && shouldOpenReminder()
+            popupAnnouncements.length > 0 && shouldOpenReminder()
           )
         }
       })
@@ -197,9 +200,12 @@ export function AnnouncementStack() {
   const current = announcements[currentIndex] ?? announcements[0]
   const period = formatPeriod(current)
   const hasMultiple = announcements.length > 1
-  const reminder = announcements[reminderIndex] ?? announcements[0]
+  const popupAnnouncements = announcements.filter(
+    (announcement) => announcement.showPopup !== false
+  )
+  const reminder = popupAnnouncements[reminderIndex] ?? popupAnnouncements[0]
   const reminderPeriod = reminder ? formatPeriod(reminder) : null
-  const hasNextReminder = reminderIndex + 1 < announcements.length
+  const hasNextReminder = reminderIndex + 1 < popupAnnouncements.length
 
   function closeReminderForToday() {
     saveReminderValue(REMINDER_TODAY_KEY, localDateKey())
@@ -236,74 +242,76 @@ export function AnnouncementStack() {
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
     >
-      <Dialog
-        open={reminderOpen}
-        onOpenChange={(open) => {
-          if (open) {
-            setReminderOpen(true)
-            return
-          }
+      {reminder && (
+        <Dialog
+          open={reminderOpen}
+          onOpenChange={(open) => {
+            if (open) {
+              setReminderOpen(true)
+              return
+            }
 
-          advanceReminder()
-        }}
-      >
-        <DialogContent showCloseButton={false} className="sm:max-w-lg">
-          <DialogHeader>
-            <div className="flex items-center gap-3">
-              <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                <IconBellRinging className="size-5" />
+            advanceReminder()
+          }}
+        >
+          <DialogContent showCloseButton={false} className="sm:max-w-lg">
+            <DialogHeader>
+              <div className="flex items-center gap-3">
+                <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                  <IconBellRinging className="size-5" />
+                </div>
+                <DialogTitle>公告提醒</DialogTitle>
               </div>
-              <DialogTitle>公告提醒</DialogTitle>
-            </div>
-          </DialogHeader>
+            </DialogHeader>
 
-          <div className="rounded-xl border border-border/70 bg-muted/30 p-4">
-            <div className="flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <div className="flex min-w-0 items-center gap-2">
-                  <span className="shrink-0 text-primary">
-                    {icons[reminder.level]}
-                  </span>
-                  <span
-                    className="truncate font-medium"
-                    title={reminder.title}
+            <div className="rounded-xl border border-border/70 bg-muted/30 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span className="shrink-0 text-primary">
+                      {icons[reminder.level]}
+                    </span>
+                    <span
+                      className="truncate font-medium"
+                      title={reminder.title}
+                    >
+                      {reminder.title}
+                    </span>
+                    <Badge variant="outline" className="shrink-0">
+                      {levelLabels[reminder.level]}
+                    </Badge>
+                  </div>
+                  <div
+                    className="mt-2 line-clamp-3 text-sm text-muted-foreground"
+                    title={reminder.content}
                   >
-                    {reminder.title}
-                  </span>
-                  <Badge variant="outline" className="shrink-0">
-                    {levelLabels[reminder.level]}
-                  </Badge>
+                    {reminder.content}
+                  </div>
+                  <div
+                    className="mt-3 truncate text-xs text-muted-foreground"
+                    title={reminderPeriod ?? "持续发布"}
+                  >
+                    {reminderPeriod ?? "持续发布"}
+                  </div>
                 </div>
-                <div
-                  className="mt-2 line-clamp-3 text-sm text-muted-foreground"
-                  title={reminder.content}
-                >
-                  {reminder.content}
-                </div>
-                <div
-                  className="mt-3 truncate text-xs text-muted-foreground"
-                  title={reminderPeriod ?? "持续发布"}
-                >
-                  {reminderPeriod ?? "持续发布"}
-                </div>
+                <Badge variant="outline" className="shrink-0">
+                  {reminderIndex + 1}/{popupAnnouncements.length}
+                </Badge>
               </div>
-              <Badge variant="outline" className="shrink-0">
-                {reminderIndex + 1}/{announcements.length}
-              </Badge>
             </div>
-          </div>
 
-          <DialogFooter>
-            <Button variant="outline" onClick={advanceReminder}>
-              {hasNextReminder ? "下一条" : "取消"}
-            </Button>
-            <Button variant="outline" onClick={closeReminderForever}>
-              以后都不提醒
-            </Button>
-            <Button onClick={closeReminderForToday}>今日不再提醒</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            <DialogFooter>
+              <Button variant="outline" onClick={advanceReminder}>
+                {hasNextReminder ? "下一条" : "取消"}
+              </Button>
+              <Button variant="outline" onClick={closeReminderForever}>
+                以后都不提醒
+              </Button>
+              <Button onClick={closeReminderForToday}>今日不再提醒</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
 
       <Alert
         key={current.id}

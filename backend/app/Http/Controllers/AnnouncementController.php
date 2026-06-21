@@ -84,6 +84,7 @@ class AnnouncementController
             'level' => ['required', Rule::in(['info', 'success', 'warning', 'destructive'])],
             'audience' => ['required', Rule::in(['all', 'admin', 'user'])],
             'active' => ['sometimes', 'boolean'],
+            'show_popup' => ['sometimes', 'boolean'],
             'starts_at' => ['nullable', 'date'],
             'ends_at' => ['nullable', 'date', 'after_or_equal:starts_at'],
         ]);
@@ -108,6 +109,8 @@ class AnnouncementController
             'level' => $announcement->level,
             'audience' => $announcement->audience,
             'active' => (bool) $announcement->active,
+            'showPopup' => $announcement->show_popup !== false,
+            'show_popup' => $announcement->show_popup !== false,
             'startsAt' => DisplayTime::format($announcement->starts_at),
             'endsAt' => DisplayTime::format($announcement->ends_at),
             'createdAt' => DisplayTime::format($announcement->created_at),

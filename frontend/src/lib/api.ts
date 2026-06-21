@@ -244,6 +244,8 @@ function mapAnnouncement(input: Partial<Announcement>): Announcement {
     level: (input.level ?? "info") as AnnouncementLevel,
     audience: (input.audience ?? "all") as AnnouncementAudience,
     active: input.active !== false,
+    showPopup: input.showPopup ?? input.show_popup ?? true,
+    show_popup: input.showPopup ?? input.show_popup ?? true,
     startsAt: input.startsAt ?? input.starts_at,
     endsAt: input.endsAt ?? input.ends_at,
     createdAt: input.createdAt ?? input.created_at,
@@ -700,6 +702,7 @@ export const api = {
     level: AnnouncementLevel
     audience: AnnouncementAudience
     active: boolean
+    show_popup?: boolean
     starts_at?: string | null
     ends_at?: string | null
   }) {
@@ -716,6 +719,7 @@ export const api = {
       level: AnnouncementLevel
       audience: AnnouncementAudience
       active: boolean
+      show_popup?: boolean
       starts_at?: string | null
       ends_at?: string | null
     }
@@ -774,6 +778,11 @@ export const api = {
       method: "PUT",
       body: JSON.stringify(payload),
     }).then(({ user }) => mapUser(user))
+  },
+  removeDeletedUser(id: string) {
+    return request<{ removed_id: string }>(`/admin/users/${id}`, {
+      method: "DELETE",
+    }).then(({ removed_id }) => removed_id)
   },
   adjustUserQuota(
     id: string,
