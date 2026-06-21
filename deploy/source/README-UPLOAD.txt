@@ -1,7 +1,7 @@
 MimoTTS 源码上传包
 
 适用环境
-宝塔面板、Nginx、MySQL、PHP 7.4。
+宝塔面板、Nginx、MySQL、PHP 8.2+。
 
 PHP 扩展
 pdo_mysql、openssl、mbstring、fileinfo、tokenizer、xml、ctype、json、curl。
@@ -12,7 +12,7 @@ pdo_mysql、openssl、mbstring、fileinfo、tokenizer、xml、ctype、json、cur
 不需要在服务器执行 Composer 或 npm。
 首次安装由安装页创建数据表；后续新版本如果包含数据库迁移，使用上传脚本 -RunMigrations，或手动进入 backend 后执行 php artisan migrate --force。
 上传包不包含 .env 和 .user.ini；线上 backend/.env 按 backend.env.example 创建并保留，安装页填写的数据库信息会写回这里。如果站点根目录已有 .user.ini，不用覆盖。
-上传大小、内存和执行时间限制请在宝塔 PHP 7.4 配置页面调整。
+上传大小、内存和执行时间限制请在宝塔 PHP 8.2+ 配置页面调整。
 
 目录
 api.php：后端接口入口。
@@ -28,7 +28,7 @@ LinuxDo Connect
 回调地址填写：https://你的域名/api.php?r=/auth/linuxdo/callback
 
 宝塔设置
-PHP 版本选择 7.4。
+PHP 版本选择 8.2 或更高。
 网站目录指向上传后的站点根目录。
 默认文档包含 index.html。
 

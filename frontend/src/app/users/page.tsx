@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import {
   IconDeviceFloppy,
@@ -16,7 +16,7 @@ import { useCurrentUser } from "@/components/auth-gate"
 import { PageHeading } from "@/components/page-heading"
 import { TablePagination } from "@/components/table-pagination"
 import { api } from "@/lib/api"
-import type { BillingConfig, User } from "@/lib/types"
+import type { BillingConfig, PaginationMeta, User } from "@/lib/types"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -76,6 +76,12 @@ type QuotaAdjustmentDraft = {
 
 type FilterValue = "all"
 const defaultPageSize = 20
+const defaultUserPagination: PaginationMeta = {
+  page: 1,
+  perPage: defaultPageSize,
+  total: 0,
+  pageCount: 1,
+}
 
 export default function UsersPage() {
   const router = useRouter()
@@ -98,6 +104,8 @@ export default function UsersPage() {
     useState<FilterValue | "linked" | "unlinked">("all")
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(defaultPageSize)
+  const [userPagination, setUserPagination] =
+    useState<PaginationMeta>(defaultUserPagination)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const isAdmin = currentUser?.role === "admin"
@@ -113,6 +121,59 @@ export default function UsersPage() {
     [billing]
   )
 
+  const refreshUsers = useCallback(async (resetSelection = false) => {
+    setLoading(true)
+
+    try {
+      const userPage = await api.userPage({
+        page,
+        pageSize,
+        query,
+        role: roleFilter,
+        status: statusFilter,
+        planId: planFilter,
+        email: emailFilter,
+        linuxDo: linuxDoFilter,
+      })
+
+      setUsers(userPage.users)
+      setUserPagination(userPage.pagination)
+
+      if (userPage.pagination.page !== page) {
+        setPage(userPage.pagination.page)
+      }
+
+      if (resetSelection) {
+        setSelectedIds([])
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "用户列表获取失败")
+    } finally {
+      setLoading(false)
+    }
+  }, [
+    emailFilter,
+    linuxDoFilter,
+    page,
+    pageSize,
+    planFilter,
+    query,
+    roleFilter,
+    statusFilter,
+  ])
+
+  const refreshBilling = useCallback(async () => {
+    try {
+      setBilling(await api.adminBillingConfig())
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "套餐配置获取失败")
+    }
+  }, [])
+
+  const refresh = useCallback(async () => {
+    await Promise.all([refreshUsers(true), refreshBilling()])
+  }, [refreshBilling, refreshUsers])
+
   useEffect(() => {
     if (currentUser && !isAdmin) {
       router.replace("/dashboard")
@@ -120,81 +181,43 @@ export default function UsersPage() {
   }, [currentUser, isAdmin, router])
 
   useEffect(() => {
-    if (isAdmin) {
-      refresh()
+    if (!isAdmin) {
+      return
     }
-  }, [isAdmin])
 
-  const filteredUsers = useMemo(() => {
-    const keyword = query.trim().toLowerCase()
+    const timer = window.setTimeout(() => {
+      void refreshBilling()
+    }, 0)
 
-    return users.filter((user) => {
-      const planId = user.planId ?? ""
-      const searchable = [
-        user.id,
-        user.name,
-        user.email,
-        user.linuxdoId,
-        planId ? planNameById.get(planId) ?? planId : "",
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase()
+    return () => window.clearTimeout(timer)
+  }, [isAdmin, refreshBilling])
 
-      return (
-        (!keyword || searchable.includes(keyword)) &&
-        (roleFilter === "all" || user.role === roleFilter) &&
-        (statusFilter === "all" || (user.status ?? "active") === statusFilter) &&
-        (planFilter === "all" ||
-          (planFilter === "__none" ? !planId : planId === planFilter)) &&
-        (emailFilter === "all" ||
-          (emailFilter === "verified"
-            ? Boolean(user.emailVerifiedAt)
-            : !user.emailVerifiedAt)) &&
-        (linuxDoFilter === "all" ||
-          (linuxDoFilter === "linked"
-            ? Boolean(user.linuxdoId)
-            : !user.linuxdoId))
-      )
-    })
+  useEffect(() => {
+    if (!isAdmin) {
+      return
+    }
+
+    const timer = window.setTimeout(() => {
+      void refreshUsers()
+    }, 0)
+
+    return () => window.clearTimeout(timer)
   }, [
     emailFilter,
+    isAdmin,
     linuxDoFilter,
+    page,
+    pageSize,
     planFilter,
-    planNameById,
     query,
+    refreshUsers,
     roleFilter,
     statusFilter,
-    users,
   ])
 
-  const pageCount = Math.max(1, Math.ceil(filteredUsers.length / pageSize))
-  const safePage = Math.min(page, pageCount)
-  const paginatedUsers = useMemo(
-    () => filteredUsers.slice((safePage - 1) * pageSize, safePage * pageSize),
-    [filteredUsers, pageSize, safePage]
-  )
-  const selectedVisibleIds = paginatedUsers
+  const selectedVisibleIds = users
     .filter((user) => selectedIds.includes(user.id))
     .map((user) => user.id)
-
-  async function refresh() {
-    setLoading(true)
-
-    try {
-      const [nextUsers, nextBilling] = await Promise.all([
-        api.users(),
-        api.adminBillingConfig(),
-      ])
-      setUsers(nextUsers)
-      setBilling(nextBilling)
-      setSelectedIds([])
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "用户列表获取失败")
-    } finally {
-      setLoading(false)
-    }
-  }
 
   function toggleUser(id: string, checked: boolean) {
     setSelectedIds((current) =>
@@ -203,13 +226,18 @@ export default function UsersPage() {
   }
 
   function toggleAll(checked: boolean) {
-    const visibleIds = paginatedUsers.map((user) => user.id)
+    const visibleIds = users.map((user) => user.id)
 
     setSelectedIds((current) =>
       checked
         ? [...new Set([...current, ...visibleIds])]
         : current.filter((id) => !visibleIds.includes(id))
     )
+  }
+
+  function resetFilteredPage() {
+    setPage(1)
+    setSelectedIds([])
   }
 
   function openEdit(user: User) {
@@ -305,13 +333,12 @@ export default function UsersPage() {
     setSaving(true)
 
     try {
-      const nextUsers = await api.bulkUsers({
+      await api.bulkUsers({
         ids: selectedIds,
         action,
         plan_id: action === "set_plan" ? bulkPlanId : undefined,
       })
-      setUsers(nextUsers)
-      setSelectedIds([])
+      await refreshUsers(true)
       toast.success(action === "set_plan" ? "套餐额度已增加" : "批量操作已完成")
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "批量操作失败")
@@ -339,8 +366,8 @@ export default function UsersPage() {
               <div>
                 <CardTitle>用户列表</CardTitle>
                 <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <Badge variant="secondary">{users.length} 个用户</Badge>
-                  <Badge variant="outline">{filteredUsers.length} 个匹配</Badge>
+                  <Badge variant="secondary">{userPagination.total} 个匹配</Badge>
+                  <Badge variant="outline">{users.length} 个当前页</Badge>
                   <Badge variant="outline">{selectedIds.length} 个已选</Badge>
                 </div>
               </div>
@@ -388,7 +415,7 @@ export default function UsersPage() {
                   value={query}
                   onChange={(event) => {
                     setQuery(event.target.value)
-                    setPage(1)
+                    resetFilteredPage()
                   }}
                   placeholder="搜索名称、邮箱、套餐、LinuxDo"
                   className="pl-8"
@@ -398,7 +425,7 @@ export default function UsersPage() {
                 value={roleFilter}
                 onValueChange={(value) => {
                   setRoleFilter(value as FilterValue | "admin" | "user")
-                  setPage(1)
+                  resetFilteredPage()
                 }}
               >
                 <SelectTrigger className="w-full">
@@ -416,7 +443,7 @@ export default function UsersPage() {
                 value={statusFilter}
                 onValueChange={(value) => {
                   setStatusFilter(value as FilterValue | "active" | "suspended")
-                  setPage(1)
+                  resetFilteredPage()
                 }}
               >
                 <SelectTrigger className="w-full">
@@ -434,7 +461,7 @@ export default function UsersPage() {
                 value={planFilter}
                 onValueChange={(value) => {
                   setPlanFilter(value)
-                  setPage(1)
+                  resetFilteredPage()
                 }}
               >
                 <SelectTrigger className="w-full">
@@ -456,7 +483,7 @@ export default function UsersPage() {
                 value={emailFilter}
                 onValueChange={(value) => {
                   setEmailFilter(value as FilterValue | "verified" | "unverified")
-                  setPage(1)
+                  resetFilteredPage()
                 }}
               >
                 <SelectTrigger className="w-full">
@@ -474,7 +501,7 @@ export default function UsersPage() {
                 value={linuxDoFilter}
                 onValueChange={(value) => {
                   setLinuxDoFilter(value as FilterValue | "linked" | "unlinked")
-                  setPage(1)
+                  resetFilteredPage()
                 }}
               >
                 <SelectTrigger className="w-full">
@@ -492,7 +519,7 @@ export default function UsersPage() {
           </div>
         </CardHeader>
         <CardContent>
-          {filteredUsers.length === 0 ? (
+          {userPagination.total === 0 ? (
             <Empty>
               <EmptyHeader>
                 <EmptyMedia variant="icon">
@@ -509,8 +536,8 @@ export default function UsersPage() {
                     <TableHead>
                       <Checkbox
                         checked={
-                          paginatedUsers.length > 0 &&
-                          selectedVisibleIds.length === paginatedUsers.length
+                          users.length > 0 &&
+                          selectedVisibleIds.length === users.length
                         }
                         onCheckedChange={(checked) => toggleAll(Boolean(checked))}
                       />
@@ -528,7 +555,7 @@ export default function UsersPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {paginatedUsers.map((user) => (
+                  {users.map((user) => (
                     <TableRow key={user.id}>
                       <TableCell>
                         <Checkbox
@@ -585,12 +612,12 @@ export default function UsersPage() {
               </Table>
             </div>
           )}
-          {filteredUsers.length > 0 && (
+          {userPagination.total > 0 && (
             <div className="mt-4">
               <TablePagination
-                total={filteredUsers.length}
-                page={safePage}
-                pageSize={pageSize}
+                total={userPagination.total}
+                page={userPagination.page}
+                pageSize={userPagination.perPage}
                 onPageChange={setPage}
                 onPageSizeChange={(nextPageSize) => {
                   setPageSize(nextPageSize)

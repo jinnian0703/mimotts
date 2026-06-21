@@ -28,7 +28,7 @@ class WebInstallService
         return [
             'php_version' => PHP_VERSION,
             'checks' => [
-                'php' => version_compare(PHP_VERSION, '7.4.0', '>='),
+                'php' => version_compare(PHP_VERSION, '8.2.0', '>='),
                 'pdo_mysql' => extension_loaded('pdo_mysql'),
                 'pdo_sqlite' => extension_loaded('pdo_sqlite'),
                 'openssl' => extension_loaded('openssl'),
@@ -358,7 +358,7 @@ class WebInstallService
     private function checkMessage(string $key): string
     {
         $messages = [
-            'php' => 'PHP 版本需为 7.4 或更高',
+            'php' => 'PHP 版本需为 8.2 或更高',
             'pdo_mysql' => 'PHP 扩展 pdo_mysql 未启用',
             'pdo_sqlite' => 'PHP 扩展 pdo_sqlite 未启用',
             'openssl' => 'PHP 扩展 openssl 未启用',

@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import {
   IconClipboardList,
@@ -60,7 +60,13 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { api } from "@/lib/api"
-import type { AudioModule, AudioTask, TaskStatus } from "@/lib/types"
+import type {
+  AudioModule,
+  AudioTask,
+  PaginationMeta,
+  TaskStatus,
+  TaskUserOption,
+} from "@/lib/types"
 
 const moduleLabels: Record<AudioModule, string> = {
   "speech-recognition": "语音转文字",
@@ -78,18 +84,27 @@ const statusLabels: Record<TaskStatus, string> = {
 
 type FilterValue = "all"
 const defaultPageSize = 20
+const defaultTaskPagination: PaginationMeta = {
+  page: 1,
+  perPage: defaultPageSize,
+  total: 0,
+  pageCount: 1,
+}
 
 export default function TasksPage() {
   const router = useRouter()
   const currentUser = useCurrentUser()
   const isAdmin = currentUser?.role === "admin"
   const [tasks, setTasks] = useState<AudioTask[]>([])
+  const [taskPagination, setTaskPagination] =
+    useState<PaginationMeta>(defaultTaskPagination)
+  const [userOptions, setUserOptions] = useState<TaskUserOption[]>([])
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [query, setQuery] = useState("")
   const [moduleFilter, setModuleFilter] = useState<AudioModule | FilterValue>("all")
   const [statusFilter, setStatusFilter] = useState<TaskStatus | FilterValue>("all")
   const [userFilter, setUserFilter] = useState("all")
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [bulkDeleting, setBulkDeleting] = useState(false)
   const [page, setPage] = useState(1)
@@ -101,76 +116,74 @@ export default function TasksPage() {
     }
   }, [currentUser, isAdmin, router])
 
-  useEffect(() => {
-    if (isAdmin) {
-      void refresh()
-    }
-  }, [isAdmin])
-
-  const users = useMemo(() => {
-    const items = new Map<string, string>()
-
-    for (const task of tasks) {
-      const id = task.userId ?? ""
-      if (!id) {
-        continue
-      }
-
-      items.set(id, task.userName ?? task.userEmail ?? `用户 ${id}`)
-    }
-
-    return Array.from(items, ([id, label]) => ({ id, label }))
-  }, [tasks])
-
-  const filteredTasks = useMemo(() => {
-    const keyword = query.trim().toLowerCase()
-
-    return tasks.filter((task) => {
-      const searchable = [
-        task.id,
-        task.title,
-        task.summary,
-        task.userName,
-        task.userEmail,
-        task.userId,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase()
-
-      return (
-        (!keyword || searchable.includes(keyword)) &&
-        (moduleFilter === "all" || task.module === moduleFilter) &&
-        (statusFilter === "all" || task.status === statusFilter) &&
-        (userFilter === "all" || task.userId === userFilter)
-      )
-    })
-  }, [moduleFilter, query, statusFilter, tasks, userFilter])
-
-  const pageCount = Math.max(1, Math.ceil(filteredTasks.length / pageSize))
-  const safePage = Math.min(page, pageCount)
-  const paginatedTasks = useMemo(
-    () => filteredTasks.slice((safePage - 1) * pageSize, safePage * pageSize),
-    [filteredTasks, pageSize, safePage]
-  )
-  const selectedVisibleIds = filteredTasks
-    .filter((task) => paginatedTasks.some((item) => item.id === task.id))
+  const selectedVisibleIds = tasks
     .filter((task) => selectedIds.includes(task.id))
     .map((task) => task.id)
 
-  async function refresh() {
+  const loadTaskPage = useCallback(
+    () =>
+      api.adminTaskPage({
+        page,
+        pageSize,
+        query,
+        module: moduleFilter,
+        status: statusFilter,
+        userId: userFilter,
+      }),
+    [moduleFilter, page, pageSize, query, statusFilter, userFilter]
+  )
+
+  const refresh = useCallback(async () => {
     setLoading(true)
 
     try {
-      const nextTasks = await api.adminTasks()
-      setTasks(nextTasks)
+      const response = await loadTaskPage()
+      setTasks(response.tasks)
+      setTaskPagination(response.pagination)
+      setUserOptions(response.filters?.users ?? [])
       setSelectedIds([])
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "任务列表获取失败")
     } finally {
       setLoading(false)
     }
-  }
+  }, [loadTaskPage])
+
+  useEffect(() => {
+    if (!isAdmin) {
+      return
+    }
+
+    let active = true
+
+    async function load() {
+      try {
+        const response = await loadTaskPage()
+        if (!active) {
+          return
+        }
+
+        setTasks(response.tasks)
+        setTaskPagination(response.pagination)
+        setUserOptions(response.filters?.users ?? [])
+        setSelectedIds([])
+      } catch (error) {
+        if (active) {
+          toast.error(error instanceof Error ? error.message : "任务列表获取失败")
+        }
+      } finally {
+        if (active) {
+          setLoading(false)
+        }
+      }
+    }
+
+    void load()
+
+    return () => {
+      active = false
+    }
+  }, [isAdmin, loadTaskPage])
 
   function toggleTask(id: string, checked: boolean) {
     setSelectedIds((current) =>
@@ -179,7 +192,7 @@ export default function TasksPage() {
   }
 
   function toggleVisible(checked: boolean) {
-    const visibleIds = paginatedTasks.map((task) => task.id)
+    const visibleIds = tasks.map((task) => task.id)
 
     setSelectedIds((current) =>
       checked
@@ -194,7 +207,12 @@ export default function TasksPage() {
     try {
       await api.deleteAdminTask(task.id)
       setTasks((current) => current.filter((item) => item.id !== task.id))
+      setTaskPagination((current) => ({
+        ...current,
+        total: Math.max(0, current.total - 1),
+      }))
       setSelectedIds((current) => current.filter((id) => id !== task.id))
+      void refresh()
       toast.success("任务已删除")
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "任务删除失败")
@@ -215,6 +233,7 @@ export default function TasksPage() {
       const deletedIds = await api.bulkDeleteAdminTasks(selectedIds)
       setTasks((current) => current.filter((task) => !deletedIds.includes(task.id)))
       setSelectedIds([])
+      void refresh()
       toast.success("批量删除已完成")
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "批量删除失败")
@@ -245,8 +264,10 @@ export default function TasksPage() {
             <div>
               <CardTitle>任务列表</CardTitle>
               <div className="mt-2 flex flex-wrap items-center gap-2">
-                <Badge variant="secondary">{tasks.length} 条记录</Badge>
-                <Badge variant="outline">{filteredTasks.length} 条匹配</Badge>
+                <Badge variant="secondary">
+                  当前页 {tasks.length} 条
+                </Badge>
+                <Badge variant="outline">{taskPagination.total} 条匹配</Badge>
                 <Badge variant="outline">{selectedIds.length} 条已选</Badge>
               </div>
             </div>
@@ -318,7 +339,7 @@ export default function TasksPage() {
                 <SelectContent>
                   <SelectGroup>
                     <SelectItem value="all">全部用户</SelectItem>
-                    {users.map((user) => (
+                    {userOptions.map((user) => (
                       <SelectItem key={user.id} value={user.id}>
                         {user.label}
                       </SelectItem>
@@ -366,7 +387,7 @@ export default function TasksPage() {
           </div>
         </CardHeader>
         <CardContent>
-          {filteredTasks.length === 0 ? (
+          {tasks.length === 0 ? (
             <Empty className="border bg-card">
               <EmptyHeader>
                 <EmptyMedia variant="icon">
@@ -386,9 +407,8 @@ export default function TasksPage() {
                     <TableHead>
                       <Checkbox
                         checked={
-                          filteredTasks.length > 0 &&
-                          paginatedTasks.length > 0 &&
-                          selectedVisibleIds.length === paginatedTasks.length
+                          tasks.length > 0 &&
+                          selectedVisibleIds.length === tasks.length
                         }
                         onCheckedChange={(checked) => toggleVisible(Boolean(checked))}
                       />
@@ -404,7 +424,7 @@ export default function TasksPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {paginatedTasks.map((task) => (
+                  {tasks.map((task) => (
                     <TableRow key={task.id}>
                       <TableCell>
                         <Checkbox
@@ -516,9 +536,9 @@ export default function TasksPage() {
               </Table>
               <div className="mt-4">
                 <TablePagination
-                  total={filteredTasks.length}
-                  page={safePage}
-                  pageSize={pageSize}
+                  total={taskPagination.total}
+                  page={taskPagination.page}
+                  pageSize={taskPagination.perPage}
                   onPageChange={setPage}
                   onPageSizeChange={(nextPageSize) => {
                     setPageSize(nextPageSize)

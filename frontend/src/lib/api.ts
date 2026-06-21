@@ -18,10 +18,14 @@ import type {
   InstallStatus,
   InstallPayload,
   MimoConfig,
+  PaginatedTasks,
+  PaginatedUsers,
+  PaginationMeta,
   QuotaRecord,
   QuotaSummary,
   Role,
   SystemSetting,
+  TaskUserOption,
   UpdateStatus,
   UpdateUpgradeResult,
   User,
@@ -33,6 +37,46 @@ const CSRF_EXEMPT_PATHS = new Set(["/install"])
 
 type RequestOptions = RequestInit
 let csrfToken: string | null = null
+
+type TaskPageParams = {
+  page?: number
+  pageSize?: number
+  query?: string
+  module?: AudioModule | "all"
+  status?: string
+  userId?: string
+}
+
+type UserPageParams = {
+  page?: number
+  pageSize?: number
+  query?: string
+  role?: Role | "all"
+  status?: "active" | "suspended" | "all"
+  planId?: string
+  email?: "verified" | "unverified" | "all"
+  linuxDo?: "linked" | "unlinked" | "all"
+}
+
+type PaginationResponse = Partial<PaginationMeta> & {
+  current_page?: number
+  per_page?: number
+  last_page?: number
+}
+
+type TaskPageResponse = {
+  tasks?: AudioTask[]
+  job?: AudioTask[]
+  pagination?: PaginationResponse
+  filters?: {
+    users?: TaskUserOption[]
+  }
+}
+
+type UserPageResponse = {
+  users?: User[]
+  pagination?: PaginationResponse
+}
 
 export class ApiError extends Error {
   status: number
@@ -213,6 +257,62 @@ function endpointForModule(module: AudioModule) {
     "voice-design": "/mimo/voice-design",
     "voice-clone": "/mimo/voice-clone",
   }[module]
+}
+
+function withQuery(path: string, params: Record<string, string | number | null | undefined>) {
+  const search = new URLSearchParams()
+
+  for (const [key, value] of Object.entries(params)) {
+    if (value === null || value === undefined || value === "" || value === "all") {
+      continue
+    }
+
+    search.set(key, String(value))
+  }
+
+  const query = search.toString()
+
+  return query ? `${path}?${query}` : path
+}
+
+function mapPaginationMeta(
+  pagination: PaginationResponse | undefined,
+  fallbackTotal: number,
+  fallbackPerPage = 20
+): PaginationMeta {
+  const meta = pagination ?? {}
+  const page = Number(meta.page ?? meta.current_page ?? 1)
+  const rawPerPage = meta.perPage ?? meta.per_page ?? fallbackPerPage
+  const perPage = Number(rawPerPage || fallbackPerPage)
+  const total = Number(meta.total ?? fallbackTotal)
+  const pageCount = Number(
+    meta.pageCount ?? meta.last_page ?? Math.max(1, Math.ceil(total / perPage))
+  )
+
+  return {
+    page,
+    perPage,
+    total,
+    pageCount,
+  }
+}
+
+function mapTaskPagination(data: TaskPageResponse): PaginatedTasks {
+  const tasks = data.tasks ?? data.job ?? []
+
+  return {
+    tasks,
+    pagination: mapPaginationMeta(data.pagination, tasks.length, tasks.length || 20),
+  }
+}
+
+function mapUserPagination(data: UserPageResponse): PaginatedUsers {
+  const users = (data.users ?? []).map(mapUser)
+
+  return {
+    users,
+    pagination: mapPaginationMeta(data.pagination, users.length, users.length || 20),
+  }
 }
 
 export const api = {
@@ -572,10 +672,16 @@ export const api = {
       body: JSON.stringify(config),
     }).then(({ config }) => config)
   },
+  taskPage(params: TaskPageParams = {}) {
+    return request<TaskPageResponse>(
+      withQuery("/mimo/jobs", {
+        page: params.page,
+        per_page: params.pageSize,
+      })
+    ).then(mapTaskPagination)
+  },
   tasks() {
-    return request<{ tasks?: AudioTask[]; job?: AudioTask[] }>("/mimo/jobs").then(
-      (data) => data.tasks ?? data.job ?? []
-    )
+    return api.taskPage().then(({ tasks }) => tasks)
   },
   announcements() {
     return request<{ announcements: Announcement[] }>("/announcements").then(
@@ -634,10 +740,22 @@ export const api = {
       method: "DELETE",
     })
   },
+  userPage(params: UserPageParams = {}) {
+    return request<UserPageResponse>(
+      withQuery("/admin/users", {
+        page: params.page,
+        per_page: params.pageSize,
+        q: params.query,
+        role: params.role,
+        status: params.status,
+        plan_id: params.planId,
+        email: params.email,
+        linuxdo: params.linuxDo,
+      })
+    ).then(mapUserPagination)
+  },
   users() {
-    return request<{ users: User[] }>("/admin/users").then(({ users }) =>
-      users.map(mapUser)
-    )
+    return api.userPage().then(({ users }) => users)
   },
   updateUser(
     id: string,
@@ -677,15 +795,28 @@ export const api = {
     action: "activate" | "suspend" | "set_plan"
     plan_id?: string | null
   }) {
-    return request<{ users: User[] }>("/admin/users/bulk", {
+    return request<{ users?: User[] }>("/admin/users/bulk", {
       method: "POST",
       body: JSON.stringify(payload),
-    }).then(({ users }) => users.map(mapUser))
+    }).then(({ users }) => (users ?? []).map(mapUser))
+  },
+  adminTaskPage(params: TaskPageParams = {}) {
+    return request<TaskPageResponse>(
+      withQuery("/admin/jobs", {
+        page: params.page,
+        per_page: params.pageSize,
+        q: params.query,
+        module: params.module,
+        status: params.status,
+        user_id: params.userId,
+      })
+    ).then((data) => ({
+      ...mapTaskPagination(data),
+      filters: data.filters,
+    }))
   },
   adminTasks() {
-    return request<{ tasks: AudioTask[] }>("/admin/jobs").then(
-      ({ tasks }) => tasks
-    )
+    return api.adminTaskPage().then(({ tasks }) => tasks)
   },
   deleteAdminTask(id: string) {
     return request<void>(`/admin/jobs/${id}`, {

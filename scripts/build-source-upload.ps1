@@ -1,6 +1,7 @@
 param(
     [string] $Root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path,
-    [string] $Output = "dist"
+    [string] $Output = "dist",
+    [string] $PhpPath = $env:MIMO_PHP_PATH
 )
 
 $ErrorActionPreference = "Stop"
@@ -15,6 +16,10 @@ $oldPackagePath = Join-Path $distPath ("source-upload-old-" + [guid]::NewGuid().
 $zipPath = Join-Path $distPath "mimo-source-upload.zip"
 $composerVersion = "2.6.6"
 $composerPath = Join-Path $distPath "composer-$composerVersion.phar"
+
+if ([string]::IsNullOrWhiteSpace($PhpPath)) {
+    $PhpPath = "php"
+}
 
 function Assert-Path {
     param(
@@ -130,6 +135,16 @@ New-Item -ItemType Directory -Force -Path (Join-Path $backendPath "storage/frame
 New-Item -ItemType Directory -Force -Path (Join-Path $backendPath "storage/framework/sessions") | Out-Null
 New-Item -ItemType Directory -Force -Path (Join-Path $backendPath "storage/framework/views") | Out-Null
 
+$phpVersion = (& $PhpPath -r "echo PHP_VERSION;" 2>$null)
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($phpVersion)) {
+    throw "Unable to run PHP. Pass -PhpPath or set MIMO_PHP_PATH to a PHP 8.2+ executable."
+}
+
+$normalizedPhpVersion = ($phpVersion | Select-Object -First 1).Trim() -replace '[^\d.].*$', ''
+if ([version]$normalizedPhpVersion -lt [version]"8.2.0") {
+    throw "PHP 8.2 or higher is required. Current PHP version: $phpVersion"
+}
+
 if (-not (Test-Path $composerPath)) {
     Invoke-WebRequest -Uri "https://getcomposer.org/download/$composerVersion/composer.phar" -OutFile $composerPath
 }
@@ -144,7 +159,7 @@ try {
     $env:COMPOSER_HOME = $composerHomePath
     Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
 
-    & php $composerPath install --working-dir $backendPath --no-dev --prefer-dist --no-interaction --no-progress --optimize-autoloader
+    & $PhpPath $composerPath install --working-dir $backendPath --no-dev --prefer-dist --no-interaction --no-progress --optimize-autoloader
     if ($LASTEXITCODE -ne 0) {
         throw "Composer install failed."
     }

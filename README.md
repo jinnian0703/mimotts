@@ -2,8 +2,8 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Frontend](https://img.shields.io/badge/Frontend-Next.js%2016-black)](frontend)
-[![Backend](https://img.shields.io/badge/Backend-Laravel%208-red)](backend)
-[![PHP](https://img.shields.io/badge/PHP-7.4-777bb4)](backend/composer.json)
+[![Backend](https://img.shields.io/badge/Backend-Laravel%2012-red)](backend)
+[![PHP](https://img.shields.io/badge/PHP-8.2%2B-777bb4)](backend/composer.json)
 [![Docker](https://img.shields.io/badge/Docker-Compose%20v2-2496ed)](deploy/docker/docker-compose.yml)
 
 MimoTTS 是一个开源、自托管的小米 MimoTTS 音频任务管理平台，提供语音识别、语音合成、音色设计、声音克隆、账户认证、额度计费和后台管理。
@@ -21,7 +21,7 @@ MimoTTS 是一个开源、自托管的小米 MimoTTS 音频任务管理平台，
 | 层级 | 技术 |
 | --- | --- |
 | Frontend | Next.js 16、React 19、Tailwind CSS、shadcn/ui |
-| Backend | Laravel 8、PHP 7.4、Laravel Sanctum |
+| Backend | Laravel 12、PHP 8.2+、Laravel Sanctum |
 | Database | MySQL/MariaDB 或 SQLite |
 | Storage | Laravel 本地存储 |
 | Deployment | 源码上传、Docker Compose |
@@ -86,7 +86,7 @@ Docker 部署说明见 [deploy/docker/README.md](deploy/docker/README.md)。
 
 源码上传部署：
 
-- PHP 7.4
+- PHP 8.2+
 - Composer 2.x
 - MySQL 5.7/8.0 或 MariaDB
 - PHP 扩展：`pdo_mysql`、`openssl`、`mbstring`、`fileinfo`、`tokenizer`、`xml`、`ctype`、`json`、`curl`

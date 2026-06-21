@@ -110,7 +110,8 @@ class AudioJobProcessor
                 return $this->client->buildAsrPayload(
                     base64_encode($this->fileBytes($file)),
                     $this->client->normalizeAudioMimeType($file->mime_type, $file->original_name ?: $file->path),
-                    Arr::get($input, 'prompt')
+                    Arr::get($input, 'prompt'),
+                    Arr::get($input, 'language')
                 );
             case 'tts':
                 return $this->client->buildTtsPayload(

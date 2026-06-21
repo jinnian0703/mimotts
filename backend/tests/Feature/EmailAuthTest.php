@@ -9,6 +9,7 @@ use App\Services\InstallService;
 use App\Services\LinuxDoOAuthService;
 use App\Services\QuotaService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Routing\Middleware\ThrottleRequests;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
@@ -16,6 +17,13 @@ use Tests\TestCase;
 class EmailAuthTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->withoutMiddleware(ThrottleRequests::class);
+    }
 
     public function test_install_status_returns_email_login_state(): void
     {
@@ -356,12 +364,16 @@ class EmailAuthTest extends TestCase
             'email' => 'linuxdo-new@example.com',
         ];
         $oauth = \Mockery::mock(LinuxDoOAuthService::class);
-        $oauth->shouldReceive('fetchUser')->once()->with('auth-code')->andReturn($profile);
+        $oauth->shouldReceive('fetchUser')->once()->with('auth-code', 'https://mimo.example.com/api/auth/linuxdo/callback')->andReturn($profile);
         $oauth->shouldReceive('existingUser')->once()->with($profile)->andReturn(null);
         $oauth->shouldReceive('syncUser')->never();
         $this->app->instance(LinuxDoOAuthService::class, $oauth);
 
-        $this->withSession(['linuxdo_oauth_state' => 'state-token'])
+        $this->withSession([
+            'linuxdo_oauth_state' => 'state-token',
+            'linuxdo_oauth_redirect_uri' => 'https://mimo.example.com/api/auth/linuxdo/callback',
+            'linuxdo_oauth_frontend_url' => 'https://mimo.example.com',
+        ])
             ->getJson('/api/auth/linuxdo/callback?code=auth-code&state=state-token')
             ->assertStatus(403)
             ->assertJsonPath('error.code', 'RegistrationDisabled');
@@ -397,14 +409,17 @@ class EmailAuthTest extends TestCase
         ]);
 
         $oauth = \Mockery::mock(LinuxDoOAuthService::class);
-        $oauth->shouldReceive('fetchUser')->once()->with('auth-code')->andReturn($profile);
-        $oauth->shouldReceive('existingUser')->once()->with($profile)->andReturn($user);
+        $oauth->shouldReceive('fetchUser')->once()->with('auth-code', 'https://new.example.com/api/auth/linuxdo/callback')->andReturn($profile);
         $oauth->shouldReceive('syncUser')->once()->with($profile)->andReturn($user);
         $this->app->instance(LinuxDoOAuthService::class, $oauth);
 
-        $this->withSession(['linuxdo_oauth_state' => 'state-token'])
+        $this->withSession([
+            'linuxdo_oauth_state' => 'state-token',
+            'linuxdo_oauth_redirect_uri' => 'https://new.example.com/api/auth/linuxdo/callback',
+            'linuxdo_oauth_frontend_url' => 'https://new.example.com',
+        ])
             ->get('/api/auth/linuxdo/callback?code=auth-code&state=state-token')
-            ->assertRedirect('https://new.example.com/');
+            ->assertRedirect('https://new.example.com/dashboard');
     }
 
     public function test_user_can_bind_linuxdo_account(): void
@@ -420,8 +435,10 @@ class EmailAuthTest extends TestCase
         ];
         $oauth = \Mockery::mock(LinuxDoOAuthService::class);
         $oauth->shouldReceive('configured')->once()->andReturn(true);
-        $oauth->shouldReceive('authorizationUrl')->once()->with(\Mockery::type('string'))->andReturn('https://connect.example.test/oauth');
-        $oauth->shouldReceive('fetchUser')->once()->with('auth-code')->andReturn($profile);
+        $oauth->shouldReceive('redirectUriForRequest')->once()->andReturn('https://mimo.example.com/api/auth/linuxdo/callback');
+        $oauth->shouldReceive('frontendUrlForRequest')->once()->andReturn('https://mimo.example.com');
+        $oauth->shouldReceive('authorizationUrl')->once()->with(\Mockery::type('string'), 'https://mimo.example.com/api/auth/linuxdo/callback')->andReturn('https://connect.example.test/oauth');
+        $oauth->shouldReceive('fetchUser')->once()->with('auth-code', 'https://mimo.example.com/api/auth/linuxdo/callback')->andReturn($profile);
         $oauth->shouldReceive('profileId')->once()->with($profile)->andReturn('linuxdo-bind-user');
         $oauth->shouldReceive('profileAvatarUrl')->once()->with($profile)->andReturn('https://example.com/avatar.png');
         $this->app->instance(LinuxDoOAuthService::class, $oauth);
@@ -441,6 +458,8 @@ class EmailAuthTest extends TestCase
                 'linuxdo_oauth_state' => $sessionState,
                 'linuxdo_oauth_mode' => 'bind',
                 'linuxdo_oauth_user_id' => $user->id,
+                'linuxdo_oauth_redirect_uri' => 'https://mimo.example.com/api/auth/linuxdo/callback',
+                'linuxdo_oauth_frontend_url' => 'https://mimo.example.com',
             ])
             ->getJson('/api/auth/linuxdo/callback?code=auth-code&state='.$sessionState)
             ->assertOk()
@@ -467,7 +486,7 @@ class EmailAuthTest extends TestCase
             'username' => 'LinuxDo User',
         ];
         $oauth = \Mockery::mock(LinuxDoOAuthService::class);
-        $oauth->shouldReceive('fetchUser')->once()->with('auth-code')->andReturn($profile);
+        $oauth->shouldReceive('fetchUser')->once()->with('auth-code', 'https://mimo.example.com/api/auth/linuxdo/callback')->andReturn($profile);
         $oauth->shouldReceive('profileId')->once()->with($profile)->andReturn('linuxdo-bound-user');
         $this->app->instance(LinuxDoOAuthService::class, $oauth);
 
@@ -476,6 +495,8 @@ class EmailAuthTest extends TestCase
                 'linuxdo_oauth_state' => 'state-token',
                 'linuxdo_oauth_mode' => 'bind',
                 'linuxdo_oauth_user_id' => $user->id,
+                'linuxdo_oauth_redirect_uri' => 'https://mimo.example.com/api/auth/linuxdo/callback',
+                'linuxdo_oauth_frontend_url' => 'https://mimo.example.com',
             ])
             ->getJson('/api/auth/linuxdo/callback?code=auth-code&state=state-token')
             ->assertStatus(422)

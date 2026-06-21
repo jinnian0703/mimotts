@@ -21,6 +21,7 @@ class MimoController
     private const ASR_AUDIO_MAX_KILOBYTES = 7168;
     private const ASR_AUDIO_MAX_MEGABYTES = 7;
     private const TASK_TITLE_MAX_LENGTH = 20;
+    private const PAGE_SIZE_OPTIONS = [20, 50, 100];
 
     public function asr(
         Request $request,
@@ -43,7 +44,8 @@ class MimoController
         $payload = $client->buildAsrPayload(
             base64_encode((string) file_get_contents($data['audio']->getRealPath())),
             $client->normalizeAudioMimeType($data['audio']->getMimeType() ?: null, $data['audio']->getClientOriginalName()),
-            $data['prompt'] ?? null
+            $data['prompt'] ?? null,
+            $data['language'] ?? null
         );
 
         return $this->queue($request, $job, $payload, [
@@ -152,17 +154,13 @@ class MimoController
     public function jobs(Request $request, AudioRetentionService $retention): JsonResponse
     {
         $retention->pruneOpportunistically();
+        [$page, $perPage] = $this->paginationParams($request);
+        $query = AudioJob::query()
+            ->with('files')
+            ->where('user_id', $request->user()->id)
+            ->latest();
 
-        return response()->json([
-            'tasks' => AudioJob::query()
-                ->with('files')
-                ->where('user_id', $request->user()->id)
-                ->latest()
-                ->limit(100)
-                ->get()
-                ->map(fn (AudioJob $job) => $this->serializeJob($job))
-                ->values(),
-        ]);
+        return response()->json($this->paginateJobQuery($query, $page, $perPage));
     }
 
     public function file(Request $request, AudioFile $audioFile)
@@ -395,5 +393,38 @@ class MimoController
             default:
                 return 12;
         }
+    }
+
+    private function paginationParams(Request $request): array
+    {
+        $page = max(1, (int) $request->query('page', 1));
+        $perPage = (int) $request->query('per_page', self::PAGE_SIZE_OPTIONS[0]);
+
+        if (! in_array($perPage, self::PAGE_SIZE_OPTIONS, true)) {
+            $perPage = self::PAGE_SIZE_OPTIONS[0];
+        }
+
+        return [$page, $perPage];
+    }
+
+    private function paginateJobQuery($query, int $page, int $perPage): array
+    {
+        $total = (clone $query)->count();
+        $pageCount = max(1, (int) ceil($total / $perPage));
+        $safePage = min($page, $pageCount);
+
+        return [
+            'tasks' => (clone $query)
+                ->forPage($safePage, $perPage)
+                ->get()
+                ->map(fn (AudioJob $job) => $this->serializeJob($job))
+                ->values(),
+            'pagination' => [
+                'page' => $safePage,
+                'perPage' => $perPage,
+                'total' => $total,
+                'pageCount' => $pageCount,
+            ],
+        ];
     }
 }

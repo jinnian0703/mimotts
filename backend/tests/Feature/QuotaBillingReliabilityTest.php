@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\AudioJob;
+use App\Models\AuditLog;
 use App\Models\BillingOrder;
 use App\Models\QuotaLedgerEntry;
 use App\Models\SystemSetting;
@@ -140,12 +141,18 @@ class QuotaBillingReliabilityTest extends TestCase
         ]);
 
         $this->actingAs($user)
+            ->withHeaders([
+                'Host' => 'mimotts.example.com',
+                'X-Forwarded-Proto' => 'https',
+            ])
             ->withServerVariables([
                 'HTTP_HOST' => 'mimotts.example.com',
+                'SERVER_NAME' => 'mimotts.example.com',
                 'HTTPS' => 'on',
+                'HTTP_X_FORWARDED_PROTO' => 'https',
                 'SCRIPT_NAME' => '/api.php',
             ])
-            ->postJson('/api/billing/checkout', ['plan_id' => 'starter'])
+            ->postJson('https://mimotts.example.com/api/billing/checkout', ['plan_id' => 'starter'])
             ->assertOk()
             ->assertJsonPath('checkout_params.notify_url', 'https://mimotts.example.com/api.php?r=/billing/notify')
             ->assertJsonPath('checkout_params.return_url', 'https://mimotts.example.com/billing');
@@ -210,6 +217,52 @@ class QuotaBillingReliabilityTest extends TestCase
             ->assertStatus(400);
 
         $this->assertSame(0, (int) $user->fresh()->quota_balance);
+        $this->assertSame(0, QuotaLedgerEntry::where('type', QuotaService::TYPE_PURCHASE)->count());
+    }
+
+    public function test_notify_returns_fail_and_logs_context_when_order_is_missing(): void
+    {
+        $this->saveBillingConfig([
+            'notify_url' => 'https://configured.example.com/api/billing/notify',
+            'plans' => [
+                ['id' => 'starter', 'name' => '基础版', 'quota' => 100, 'base_amount' => 10, 'enabled' => true],
+            ],
+        ]);
+
+        $outTradeNo = 'MIMO-MISSING-ORDER';
+
+        $this->withHeaders([
+            'Host' => 'wrong-domain.example.com',
+            'X-Forwarded-Proto' => 'https',
+        ])
+            ->withServerVariables([
+                'HTTP_HOST' => 'wrong-domain.example.com',
+                'SERVER_NAME' => 'wrong-domain.example.com',
+                'HTTPS' => 'on',
+                'HTTP_X_FORWARDED_PROTO' => 'https',
+                'SCRIPT_NAME' => '/api.php',
+            ])
+            ->post('https://wrong-domain.example.com/api/billing/notify', $this->signedNotifyParams($outTradeNo, '10.00'))
+            ->assertStatus(404)
+            ->assertSee('fail')
+            ->assertDontSee('success');
+
+        $log = AuditLog::query()->where('action', 'billing.notify.missing_order')->firstOrFail();
+        $metadata = $log->metadata ?? [];
+
+        $this->assertSame($outTradeNo, $metadata['out_trade_no'] ?? null);
+        $this->assertSame('trade-'.$outTradeNo, $metadata['trade_no'] ?? null);
+        $this->assertSame('TRADE_SUCCESS', $metadata['trade_status'] ?? null);
+        $this->assertSame('pid-1', $metadata['received_pid'] ?? null);
+        $this->assertSame('pid-1', $metadata['configured_client_id'] ?? null);
+        $this->assertSame('10.00', $metadata['received_money'] ?? null);
+        $this->assertSame('https://configured.example.com/api/billing/notify', $metadata['configured_notify_url'] ?? null);
+        $this->assertSame('https://wrong-domain.example.com/api.php?r=/billing/notify', $metadata['derived_notify_url'] ?? null);
+        $this->assertSame('wrong-domain.example.com', $metadata['request_host'] ?? null);
+        $this->assertSame('sqlite', $metadata['database_connection'] ?? null);
+        $this->assertSame('sqlite', $metadata['database_driver'] ?? null);
+        $this->assertArrayHasKey('database_name', $metadata);
+        $this->assertSame(0, BillingOrder::query()->count());
         $this->assertSame(0, QuotaLedgerEntry::where('type', QuotaService::TYPE_PURCHASE)->count());
     }
 

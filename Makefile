@@ -36,7 +36,7 @@ migrate:
 	$(COMPOSE) exec app php artisan migrate --force
 
 key:
-	docker run --rm php:7.4-cli-alpine php -r 'echo "base64:".base64_encode(random_bytes(32)).PHP_EOL;'
+	docker run --rm php:8.2-cli-alpine php -r 'echo "base64:".base64_encode(random_bytes(32)).PHP_EOL;'
 
 shell:
 	$(COMPOSE) exec app sh

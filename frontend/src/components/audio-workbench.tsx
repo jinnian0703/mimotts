@@ -13,7 +13,12 @@ import {
 import { toast } from "sonner"
 
 import { api } from "@/lib/api"
-import type { AudioModule, AudioRetentionConfig, AudioTask } from "@/lib/types"
+import type {
+  AudioModule,
+  AudioRetentionConfig,
+  AudioTask,
+  PaginationMeta,
+} from "@/lib/types"
 import { StatusBadge } from "@/components/status-badge"
 import { TablePagination } from "@/components/table-pagination"
 import { TaskDetailDialog } from "@/components/task-detail-dialog"
@@ -192,14 +197,20 @@ const recognitionAudioMaxLabel = "7 MB"
 const recognitionBase64MaxLabel = "10 MB"
 const taskTitleMaxLength = 20
 const defaultPageSize = 20
+const defaultTaskPagination: PaginationMeta = {
+  page: 1,
+  perPage: defaultPageSize,
+  total: 0,
+  pageCount: 1,
+}
 
-async function fetchWorkbenchState() {
-  const [tasks, retention] = await Promise.all([
-    api.tasks(),
+async function fetchWorkbenchState(page = 1, pageSize = defaultPageSize) {
+  const [taskPage, retention] = await Promise.all([
+    api.taskPage({ page, pageSize }),
     api.audioRetention().catch(() => null),
   ])
 
-  return { tasks, retention }
+  return { tasks: taskPage.tasks, pagination: taskPage.pagination, retention }
 }
 
 export function AudioWorkbench() {
@@ -208,6 +219,10 @@ export function AudioWorkbench() {
     useState<AudioModule>("speech-recognition")
   const [loading, setLoading] = useState(true)
   const [retention, setRetention] = useState<AudioRetentionConfig | null>(null)
+  const [taskPagination, setTaskPagination] =
+    useState<PaginationMeta>(defaultTaskPagination)
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(defaultPageSize)
 
   const refreshTasks = useCallback(async (notify = true, showLoading = true) => {
     if (showLoading) {
@@ -215,8 +230,9 @@ export function AudioWorkbench() {
     }
 
     try {
-      const workbenchState = await fetchWorkbenchState()
+      const workbenchState = await fetchWorkbenchState(page, pageSize)
       setTasks(workbenchState.tasks)
+      setTaskPagination(workbenchState.pagination)
       if (workbenchState.retention) {
         setRetention(workbenchState.retention)
       }
@@ -230,19 +246,20 @@ export function AudioWorkbench() {
         setLoading(false)
       }
     }
-  }, [])
+  }, [page, pageSize])
 
   useEffect(() => {
     let active = true
 
     async function loadInitialTasks() {
       try {
-        const workbenchState = await fetchWorkbenchState()
+        const workbenchState = await fetchWorkbenchState(page, pageSize)
         if (!active) {
           return
         }
 
         setTasks(workbenchState.tasks)
+        setTaskPagination(workbenchState.pagination)
         if (workbenchState.retention) {
           setRetention(workbenchState.retention)
         }
@@ -262,7 +279,7 @@ export function AudioWorkbench() {
     return () => {
       active = false
     }
-  }, [])
+  }, [page, pageSize])
 
   useEffect(() => {
     const hasActiveTasks = tasks.some((task) =>
@@ -283,7 +300,29 @@ export function AudioWorkbench() {
   }, [refreshTasks, tasks])
 
   function appendTask(task: AudioTask) {
-    setTasks((current) => [task, ...current.filter((item) => item.id !== task.id)])
+    setPage(1)
+    setTaskPagination((current) => {
+      const total = current.total + (tasks.some((item) => item.id === task.id) ? 0 : 1)
+
+      return {
+        page: 1,
+        perPage: pageSize,
+        total,
+        pageCount: Math.max(1, Math.ceil(total / pageSize)),
+      }
+    })
+    setTasks((current) =>
+      [task, ...current.filter((item) => item.id !== task.id)].slice(0, pageSize)
+    )
+  }
+
+  function handleTaskDeleted(taskId: string) {
+    setTasks((current) => current.filter((task) => task.id !== taskId))
+    setTaskPagination((current) => ({
+      ...current,
+      total: Math.max(0, current.total - 1),
+    }))
+    void refreshTasks(false, false)
   }
 
   return (
@@ -355,9 +394,13 @@ export function AudioWorkbench() {
       <TaskTable
         tasks={tasks}
         retention={retention}
-        onDeleted={(taskId) =>
-          setTasks((current) => current.filter((task) => task.id !== taskId))
-        }
+        pagination={taskPagination}
+        onPageChange={setPage}
+        onPageSizeChange={(nextPageSize) => {
+          setPage(1)
+          setPageSize(nextPageSize)
+        }}
+        onDeleted={handleTaskDeleted}
       />
     </div>
   )
@@ -834,21 +877,19 @@ function SpeechRateField({ id }: { id: string }) {
 function TaskTable({
   tasks,
   retention,
+  pagination,
+  onPageChange,
+  onPageSizeChange,
   onDeleted,
 }: {
   tasks: AudioTask[]
   retention: AudioRetentionConfig | null
+  pagination: PaginationMeta
+  onPageChange: (page: number) => void
+  onPageSizeChange: (pageSize: number) => void
   onDeleted: (taskId: string) => void
 }) {
   const [deletingId, setDeletingId] = useState<string | null>(null)
-  const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(defaultPageSize)
-  const pageCount = Math.max(1, Math.ceil(tasks.length / pageSize))
-  const safePage = Math.min(page, pageCount)
-  const paginatedTasks = tasks.slice(
-    (safePage - 1) * pageSize,
-    safePage * pageSize
-  )
 
   async function deleteTask(task: AudioTask) {
     setDeletingId(task.id)
@@ -864,7 +905,7 @@ function TaskTable({
     }
   }
 
-  if (tasks.length === 0) {
+  if (pagination.total === 0) {
     return (
       <Empty className="border bg-card">
         <EmptyHeader>
@@ -901,7 +942,7 @@ function TaskTable({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {paginatedTasks.map((task) => (
+              {tasks.map((task) => (
                 <TableRow key={task.id}>
                   <TableCell>
                     <div className="flex flex-col gap-1">
@@ -978,14 +1019,11 @@ function TaskTable({
         </div>
         <div className="mt-4">
           <TablePagination
-            total={tasks.length}
-            page={safePage}
-            pageSize={pageSize}
-            onPageChange={setPage}
-            onPageSizeChange={(nextPageSize) => {
-              setPageSize(nextPageSize)
-              setPage(1)
-            }}
+            total={pagination.total}
+            page={pagination.page}
+            pageSize={pagination.perPage}
+            onPageChange={onPageChange}
+            onPageSizeChange={onPageSizeChange}
           />
         </div>
       </CardContent>

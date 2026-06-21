@@ -247,6 +247,29 @@ export type AudioTask = {
   quotaLedgerId?: string | null
 }
 
+export type PaginationMeta = {
+  page: number
+  perPage: number
+  total: number
+  pageCount: number
+}
+
+export type PaginatedTasks = {
+  tasks: AudioTask[]
+  pagination: PaginationMeta
+}
+
+export type PaginatedUsers = {
+  users: User[]
+  pagination: PaginationMeta
+}
+
+export type TaskUserOption = {
+  id: string
+  label: string
+  email?: string | null
+}
+
 export type AudioModule =
   | "speech-recognition"
   | "speech-synthesis"

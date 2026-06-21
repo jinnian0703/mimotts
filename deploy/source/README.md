@@ -7,7 +7,7 @@
 运行模型：
 
 - Nginx 服务静态页面。
-- PHP 7.4 执行根目录 `api.php`。
+- PHP 8.2+ 执行根目录 `api.php`。
 - Laravel 后端位于 `backend`。
 - MySQL/MariaDB 信息在首次安装页填写，并写回线上 `backend/.env`。
 - 首次数据表由安装流程创建。
@@ -29,7 +29,7 @@ dist/mimo-source-upload.zip
 
 上传 `source-upload` 目录内的全部文件到宝塔站点根目录。不要只上传外层 `source-upload` 文件夹，除非宝塔站点目录直接指向该文件夹。
 
-上传包不包含 `.env` 和 `.user.ini`。线上 `backend/.env` 按示例文件创建并长期保留；如果宝塔站点根目录已有 `.user.ini`，不用覆盖。上传大小、内存和执行时间限制请在宝塔 PHP 7.4 的配置页面调整。
+上传包不包含 `.env` 和 `.user.ini`。线上 `backend/.env` 按示例文件创建并长期保留；如果宝塔站点根目录已有 `.user.ini`，不用覆盖。上传大小、内存和执行时间限制请在宝塔 PHP 8.2+ 的配置页面调整。
 
 ## 包结构
 
@@ -51,7 +51,7 @@ README.md
 - 宝塔面板
 - Nginx
 - MySQL 5.7 或 8.0
-- PHP 7.4
+- PHP 8.2+
 - PHP 扩展：`pdo_mysql`、`openssl`、`mbstring`、`fileinfo`、`tokenizer`、`xml`、`ctype`、`json`、`curl`
 
 建议 PHP 配置：
@@ -79,7 +79,7 @@ max_execution_time = 180
 index.html
 ```
 
-PHP 版本选择 7.4。首次安装前，按示例文件创建：
+PHP 版本选择 8.2 或更高。首次安装前，按示例文件创建：
 
 ```text
 backend/.env

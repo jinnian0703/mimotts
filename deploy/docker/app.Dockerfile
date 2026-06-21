@@ -19,7 +19,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 
 RUN npm run build
 
-FROM php:7.4-cli-alpine AS vendor
+FROM php:8.2-cli-alpine AS vendor
 
 WORKDIR /app
 
@@ -41,12 +41,12 @@ RUN apk add --no-cache \
       pdo_sqlite \
       zip
 
-COPY --from=composer:2.2 /usr/bin/composer /usr/local/bin/composer
+COPY --from=composer:2 /usr/bin/composer /usr/local/bin/composer
 COPY backend/ ./
 
 RUN composer install --no-dev --prefer-dist --no-interaction --no-progress --optimize-autoloader --no-scripts
 
-FROM php:7.4-apache
+FROM php:8.2-apache
 
 WORKDIR /var/www/backend
 

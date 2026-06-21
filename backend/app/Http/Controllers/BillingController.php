@@ -125,13 +125,15 @@ class BillingController
 
         $order = BillingOrder::query()->where('out_trade_no', $outTradeNo)->first();
         if (! $order) {
-            $audit->record($request, 'billing.notify.missing_order', 'trade', null, [
-                'out_trade_no' => $outTradeNo,
-                'trade_no' => $params['trade_no'] ?? null,
-                'trade_status' => $tradeStatus,
-            ]);
+            $audit->record(
+                $request,
+                'billing.notify.missing_order',
+                'trade',
+                null,
+                $this->missingOrderNotifyContext($request, $config, $params, $outTradeNo, $tradeStatus)
+            );
 
-            return response('success');
+            return response('fail', 404);
         }
 
         if (in_array($tradeStatus, ['TRADE_SUCCESS', 'TRADE_FINISHED', 'SUCCESS'], true)) {
@@ -282,6 +284,30 @@ class BillingController
         }
 
         return number_format((float) $received, 2, '.', '') === number_format((float) $expected, 2, '.', '');
+    }
+
+    private function missingOrderNotifyContext(Request $request, array $config, array $params, string $outTradeNo, string $tradeStatus): array
+    {
+        $connection = DB::connection();
+
+        return [
+            'out_trade_no' => $outTradeNo,
+            'trade_no' => $params['trade_no'] ?? null,
+            'trade_status' => $tradeStatus,
+            'received_pid' => $params['pid'] ?? null,
+            'configured_client_id' => $config['client_id'] ?? null,
+            'received_money' => $params['money'] ?? null,
+            'configured_notify_url' => $config['notify_url'] ?? null,
+            'derived_notify_url' => $this->apiUrl($request, '/billing/notify'),
+            'request_host' => $request->getHttpHost(),
+            'request_scheme' => $request->headers->get('x-forwarded-proto') ?: $request->getScheme(),
+            'request_method' => $request->method(),
+            'request_path' => '/'.ltrim($request->path(), '/'),
+            'request_script_name' => $request->server('SCRIPT_NAME'),
+            'database_connection' => DB::getDefaultConnection(),
+            'database_driver' => $connection->getDriverName(),
+            'database_name' => $connection->getDatabaseName(),
+        ];
     }
 
     private function baseUrl(Request $request): string

@@ -24,6 +24,7 @@ use RuntimeException;
 class AdminOverviewController
 {
     private const BASIC_INFO_KEY = 'basic_info';
+    private const PAGE_SIZE_OPTIONS = [20, 50, 100];
 
     public function dashboard(
         Request $request,
@@ -58,28 +59,13 @@ class AdminOverviewController
         ]);
     }
 
-    public function users(): JsonResponse
+    public function users(Request $request, BillingConfigService $billing): JsonResponse
     {
-        return response()->json([
-            'users' => User::query()
-                ->latest()
-                ->get()
-                ->map(fn (User $user) => [
-                    'id' => (string) $user->id,
-                    'name' => $user->name,
-                    'email' => $user->email,
-                    'role' => $user->is_admin ? 'admin' : 'user',
-                    'status' => $user->status ?: 'active',
-                    'planId' => $user->plan_id,
-                    'quotaBalance' => (int) $user->quota_balance,
-                    'emailVerifiedAt' => DisplayTime::format($user->email_verified_at),
-                    'avatarUrl' => $user->avatar_url,
-                    'linuxdoId' => $user->linuxdo_id,
-                    'lastLoginAt' => DisplayTime::format($user->last_login_at),
-                    'createdAt' => DisplayTime::format($user->created_at),
-                ])
-                ->values(),
-        ]);
+        [$page, $perPage] = $this->paginationParams($request);
+        $query = User::query()->latest();
+        $this->applyUserFilters($query, $request, $billing);
+
+        return response()->json($this->paginateUserQuery($query, $page, $perPage));
     }
 
     public function updateUser(Request $request, User $user, BillingConfigService $billing, QuotaService $quota): JsonResponse
@@ -240,24 +226,35 @@ class AdminOverviewController
             });
         }
 
-        return $this->users();
+        return response()->json([
+            'ok' => true,
+            'updated_ids' => array_values(array_map('strval', $data['ids'])),
+        ]);
     }
 
     public function jobs(Request $request): JsonResponse
     {
-        return response()->json([
-            'tasks' => $this->jobQuery($request->user()->id)->get()->map(fn (AudioJob $job) => $this->serializeJob($job))->values(),
-        ]);
+        [$page, $perPage] = $this->paginationParams($request);
+
+        return response()->json($this->paginateJobQuery(
+            $this->jobQuery($request->user()->id),
+            $page,
+            $perPage
+        ));
     }
 
-    public function allJobs(AudioRetentionService $retention): JsonResponse
+    public function allJobs(Request $request, AudioRetentionService $retention): JsonResponse
     {
         $retention->pruneOpportunistically();
+        [$page, $perPage] = $this->paginationParams($request);
+        $query = $this->jobQuery();
+        $this->applyJobFilters($query, $request);
+        $payload = $this->paginateJobQuery($query, $page, $perPage);
+        $payload['filters'] = [
+            'users' => $this->jobUserOptions(),
+        ];
 
-        return response()->json([
-            'tasks' => $this->jobQuery()->get()->map(fn (AudioJob $job) => $this->serializeJob($job))
-                ->values(),
-        ]);
+        return response()->json($payload);
     }
 
     public function audits(): JsonResponse
@@ -495,8 +492,208 @@ class AdminOverviewController
         return AudioJob::query()
             ->with(['files', 'user'])
             ->when($userId, fn ($query) => $query->where('user_id', $userId))
-            ->latest()
-            ->limit(100);
+            ->latest();
+    }
+
+    private function paginationParams(Request $request): array
+    {
+        $page = max(1, (int) $request->query('page', 1));
+        $perPage = (int) $request->query('per_page', self::PAGE_SIZE_OPTIONS[0]);
+
+        if (! in_array($perPage, self::PAGE_SIZE_OPTIONS, true)) {
+            $perPage = self::PAGE_SIZE_OPTIONS[0];
+        }
+
+        return [$page, $perPage];
+    }
+
+    private function paginateJobQuery($query, int $page, int $perPage): array
+    {
+        $total = (clone $query)->count();
+        $pageCount = max(1, (int) ceil($total / $perPage));
+        $safePage = min($page, $pageCount);
+
+        return [
+            'tasks' => (clone $query)
+                ->forPage($safePage, $perPage)
+                ->get()
+                ->map(fn (AudioJob $job) => $this->serializeJob($job))
+                ->values(),
+            'pagination' => [
+                'page' => $safePage,
+                'perPage' => $perPage,
+                'total' => $total,
+                'pageCount' => $pageCount,
+            ],
+        ];
+    }
+
+    private function applyJobFilters($query, Request $request): void
+    {
+        $keyword = trim((string) $request->query('q', ''));
+        $module = (string) $request->query('module', '');
+        $status = (string) $request->query('status', '');
+        $userId = (int) $request->query('user_id', 0);
+
+        if ($keyword !== '') {
+            $like = $this->likePattern($keyword);
+            $query->where(function ($subQuery) use ($keyword, $like): void {
+                $this->whereEscapedLike($subQuery, 'model', $like);
+                $this->whereEscapedLike($subQuery, 'request_payload->_input->title', $like, 'or');
+                $this->whereEscapedLike($subQuery, 'error_message', $like, 'or');
+
+                $subQuery->orWhereHas('user', function ($userQuery) use ($like): void {
+                    $this->whereEscapedLike($userQuery, 'name', $like);
+                    $this->whereEscapedLike($userQuery, 'email', $like, 'or');
+                });
+
+                if (ctype_digit($keyword)) {
+                    $subQuery->orWhere('id', (int) $keyword);
+                }
+            });
+        }
+
+        $type = $this->typeForModule($module);
+        if ($type) {
+            $query->where('type', $type);
+        }
+
+        if (in_array($status, ['queued', 'running', 'completed', 'failed'], true)) {
+            $query->where('status', $status);
+        }
+
+        if ($userId > 0) {
+            $query->where('user_id', $userId);
+        }
+    }
+
+    private function paginateUserQuery($query, int $page, int $perPage): array
+    {
+        $total = (clone $query)->count();
+        $pageCount = max(1, (int) ceil($total / $perPage));
+        $safePage = min($page, $pageCount);
+
+        return [
+            'users' => (clone $query)
+                ->forPage($safePage, $perPage)
+                ->get()
+                ->map(fn (User $user) => $this->serializeUser($user))
+                ->values(),
+            'pagination' => [
+                'page' => $safePage,
+                'perPage' => $perPage,
+                'total' => $total,
+                'pageCount' => $pageCount,
+            ],
+        ];
+    }
+
+    private function applyUserFilters($query, Request $request, BillingConfigService $billing): void
+    {
+        $keyword = trim((string) $request->query('q', ''));
+        $role = (string) $request->query('role', '');
+        $status = (string) $request->query('status', '');
+        $planId = (string) $request->query('plan_id', '');
+        $email = (string) $request->query('email', '');
+        $linuxDo = (string) $request->query('linuxdo', '');
+
+        if ($keyword !== '') {
+            $like = $this->likePattern($keyword);
+            $matchingPlanIds = $this->matchingPlanIds($billing, $keyword);
+
+            $query->where(function ($subQuery) use ($keyword, $like, $matchingPlanIds): void {
+                $this->whereEscapedLike($subQuery, 'name', $like);
+                $this->whereEscapedLike($subQuery, 'email', $like, 'or');
+                $this->whereEscapedLike($subQuery, 'linuxdo_id', $like, 'or');
+                $this->whereEscapedLike($subQuery, 'plan_id', $like, 'or');
+
+                if ($matchingPlanIds) {
+                    $subQuery->orWhereIn('plan_id', $matchingPlanIds);
+                }
+
+                if (ctype_digit($keyword)) {
+                    $subQuery->orWhere('id', (int) $keyword);
+                }
+            });
+        }
+
+        if (in_array($role, ['admin', 'user'], true)) {
+            $query->where('is_admin', $role === 'admin');
+        }
+
+        if ($status === 'active') {
+            $query->where(fn ($statusQuery) => $statusQuery
+                ->whereNull('status')
+                ->orWhere('status', '<>', 'suspended'));
+        } elseif ($status === 'suspended') {
+            $query->where('status', 'suspended');
+        }
+
+        if ($planId === '__none') {
+            $query->where(fn ($planQuery) => $planQuery
+                ->whereNull('plan_id')
+                ->orWhere('plan_id', ''));
+        } elseif ($planId !== '' && $planId !== 'all') {
+            $query->where('plan_id', $planId);
+        }
+
+        if ($email === 'verified') {
+            $query->whereNotNull('email_verified_at');
+        } elseif ($email === 'unverified') {
+            $query->whereNull('email_verified_at');
+        }
+
+        if ($linuxDo === 'linked') {
+            $query->whereNotNull('linuxdo_id');
+        } elseif ($linuxDo === 'unlinked') {
+            $query->whereNull('linuxdo_id');
+        }
+    }
+
+    private function matchingPlanIds(BillingConfigService $billing, string $keyword): array
+    {
+        $needle = Str::lower($keyword);
+
+        return array_values(array_filter(array_map(
+            function (array $plan) use ($needle): ?string {
+                $id = (string) ($plan['id'] ?? '');
+                $name = (string) ($plan['name'] ?? '');
+                $haystack = Str::lower(trim($id.' '.$name));
+
+                return $haystack !== '' && Str::contains($haystack, $needle) ? $id : null;
+            },
+            $billing->config()['plans'] ?? []
+        )));
+    }
+
+    private function likePattern(string $keyword): string
+    {
+        return '%'.str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $keyword).'%';
+    }
+
+    private function whereEscapedLike($query, string $column, string $pattern, string $boolean = 'and'): void
+    {
+        $wrapped = $query->getQuery()->getGrammar()->wrap($column);
+        $escapeSql = $query->getQuery()->getConnection()->getDriverName() === 'sqlite'
+            ? " ESCAPE '\\'"
+            : " ESCAPE '\\\\'";
+
+        $query->whereRaw($wrapped.' LIKE ?'.$escapeSql, [$pattern], $boolean);
+    }
+
+    private function jobUserOptions(): array
+    {
+        return User::query()
+            ->whereIn('id', AudioJob::query()->select('user_id')->distinct())
+            ->orderBy('name')
+            ->get()
+            ->map(fn (User $user) => [
+                'id' => (string) $user->id,
+                'label' => $user->name ?: ($user->email ?: '用户 '.$user->id),
+                'email' => $user->email,
+            ])
+            ->values()
+            ->all();
     }
 
     private function serializeUser(User $user): array
@@ -618,12 +815,15 @@ class AdminOverviewController
     private function serializeJob(AudioJob $job): array
     {
         $file = $job->files->firstWhere('kind', 'generated') ?? $job->files->first();
-        $requestMeta = is_array($job->request_payload) ? ($job->request_payload['_meta'] ?? []) : [];
+        $requestPayload = is_array($job->request_payload) ? $job->request_payload : [];
+        $requestMeta = $requestPayload['_meta'] ?? [];
+        $input = is_array($requestPayload['_input'] ?? null) ? $requestPayload['_input'] : [];
+        $title = trim((string) ($input['title'] ?? ''));
 
         return [
             'id' => (string) $job->id,
             'module' => $this->moduleForType($job->type),
-            'title' => $job->model,
+            'title' => $title !== '' ? $title : $job->model,
             'status' => $job->status,
             'progress' => $job->status === 'completed' ? 100 : ($job->status === 'failed' ? 100 : 50),
             'createdAt' => $this->formatTaskTime($job->created_at),
@@ -668,6 +868,22 @@ class AdminOverviewController
                 return 'voice-clone';
             default:
                 return $type;
+        }
+    }
+
+    private function typeForModule(string $module): ?string
+    {
+        switch ($module) {
+            case 'speech-recognition':
+                return 'asr';
+            case 'speech-synthesis':
+                return 'tts';
+            case 'voice-design':
+                return 'voice_design';
+            case 'voice-clone':
+                return 'voice_clone';
+            default:
+                return null;
         }
     }
 }
