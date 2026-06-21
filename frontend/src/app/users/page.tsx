@@ -16,7 +16,7 @@ import { useCurrentUser } from "@/components/auth-gate"
 import { PageHeading } from "@/components/page-heading"
 import { TablePagination } from "@/components/table-pagination"
 import { api } from "@/lib/api"
-import type { BillingConfig, PaginationMeta, User } from "@/lib/types"
+import type { BillingConfig, PaginationMeta, User, UserStatus } from "@/lib/types"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -63,7 +63,7 @@ type UserDraft = {
   name: string
   email: string
   role: "admin" | "user"
-  status: "active" | "suspended"
+  status: UserStatus
   plan_id: string
 }
 
@@ -96,7 +96,7 @@ export default function UsersPage() {
   const [query, setQuery] = useState("")
   const [roleFilter, setRoleFilter] = useState<FilterValue | "admin" | "user">("all")
   const [statusFilter, setStatusFilter] =
-    useState<FilterValue | "active" | "suspended">("all")
+    useState<FilterValue | UserStatus>("all")
   const [planFilter, setPlanFilter] = useState("all")
   const [emailFilter, setEmailFilter] =
     useState<FilterValue | "verified" | "unverified">("all")
@@ -120,6 +120,20 @@ export default function UsersPage() {
       ),
     [billing]
   )
+
+  const statusLabels: Record<UserStatus, string> = {
+    active: "启用",
+    suspended: "暂停",
+    deleted: "已注销",
+  }
+
+  function userStatus(user: User): UserStatus {
+    return user.status ?? "active"
+  }
+
+  function canManageUser(user: User): boolean {
+    return userStatus(user) !== "deleted"
+  }
 
   const refreshUsers = useCallback(async (resetSelection = false) => {
     setLoading(true)
@@ -215,9 +229,10 @@ export default function UsersPage() {
     statusFilter,
   ])
 
-  const selectedVisibleIds = users
-    .filter((user) => selectedIds.includes(user.id))
-    .map((user) => user.id)
+  const manageableVisibleIds = users.filter(canManageUser).map((user) => user.id)
+  const selectedVisibleIds = manageableVisibleIds.filter((id) =>
+    selectedIds.includes(id)
+  )
 
   function toggleUser(id: string, checked: boolean) {
     setSelectedIds((current) =>
@@ -226,12 +241,10 @@ export default function UsersPage() {
   }
 
   function toggleAll(checked: boolean) {
-    const visibleIds = users.map((user) => user.id)
-
     setSelectedIds((current) =>
       checked
-        ? [...new Set([...current, ...visibleIds])]
-        : current.filter((id) => !visibleIds.includes(id))
+        ? [...new Set([...current, ...manageableVisibleIds])]
+        : current.filter((id) => !manageableVisibleIds.includes(id))
     )
   }
 
@@ -442,7 +455,7 @@ export default function UsersPage() {
               <Select
                 value={statusFilter}
                 onValueChange={(value) => {
-                  setStatusFilter(value as FilterValue | "active" | "suspended")
+                  setStatusFilter(value as FilterValue | UserStatus)
                   resetFilteredPage()
                 }}
               >
@@ -454,6 +467,7 @@ export default function UsersPage() {
                     <SelectItem value="all">全部状态</SelectItem>
                     <SelectItem value="active">启用</SelectItem>
                     <SelectItem value="suspended">暂停</SelectItem>
+                    <SelectItem value="deleted">已注销</SelectItem>
                   </SelectGroup>
                 </SelectContent>
               </Select>
@@ -536,8 +550,8 @@ export default function UsersPage() {
                     <TableHead>
                       <Checkbox
                         checked={
-                          users.length > 0 &&
-                          selectedVisibleIds.length === users.length
+                          manageableVisibleIds.length > 0 &&
+                          selectedVisibleIds.length === manageableVisibleIds.length
                         }
                         onCheckedChange={(checked) => toggleAll(Boolean(checked))}
                       />
@@ -555,59 +569,69 @@ export default function UsersPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {users.map((user) => (
-                    <TableRow key={user.id}>
-                      <TableCell>
-                        <Checkbox
-                          checked={selectedIds.includes(user.id)}
-                          onCheckedChange={(checked) =>
-                            toggleUser(user.id, Boolean(checked))
-                          }
-                        />
-                      </TableCell>
-                      <TableCell className="font-medium">{user.name}</TableCell>
-                      <TableCell>{user.email ?? "-"}</TableCell>
-                      <TableCell>
-                        <Badge variant="secondary">
-                          {user.role === "admin" ? "管理员" : "用户"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={
-                            user.status === "suspended"
-                              ? "destructive"
-                              : "secondary"
-                          }
-                        >
-                          {user.status === "suspended" ? "暂停" : "启用"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        {user.planId ? planNameById.get(user.planId) ?? user.planId : "-"}
-                      </TableCell>
-                      <TableCell>{user.quotaBalance ?? 0}</TableCell>
-                      <TableCell>{user.emailVerifiedAt ? "已验证" : "未验证"}</TableCell>
-                      <TableCell>{user.linuxdoId ? "已绑定" : "未绑定"}</TableCell>
-                      <TableCell>{user.lastLoginAt ?? "-"}</TableCell>
-                      <TableCell className="text-right">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => openQuotaAdjustment(user)}
-                        >
-                          额度
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => openEdit(user)}
-                        >
-                          编辑
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {users.map((user) => {
+                    const status = userStatus(user)
+                    const manageable = canManageUser(user)
+
+                    return (
+                      <TableRow key={user.id}>
+                        <TableCell>
+                          <Checkbox
+                            checked={selectedIds.includes(user.id)}
+                            disabled={!manageable}
+                            onCheckedChange={(checked) =>
+                              toggleUser(user.id, Boolean(checked))
+                            }
+                          />
+                        </TableCell>
+                        <TableCell className="font-medium">{user.name}</TableCell>
+                        <TableCell>{user.email ?? "-"}</TableCell>
+                        <TableCell>
+                          <Badge variant="secondary">
+                            {user.role === "admin" ? "管理员" : "用户"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={
+                              status === "suspended"
+                                ? "destructive"
+                                : status === "deleted"
+                                  ? "outline"
+                                  : "secondary"
+                            }
+                          >
+                            {statusLabels[status]}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          {user.planId ? planNameById.get(user.planId) ?? user.planId : "-"}
+                        </TableCell>
+                        <TableCell>{user.quotaBalance ?? 0}</TableCell>
+                        <TableCell>{user.emailVerifiedAt ? "已验证" : "未验证"}</TableCell>
+                        <TableCell>{user.linuxdoId ? "已绑定" : "未绑定"}</TableCell>
+                        <TableCell>{user.lastLoginAt ?? "-"}</TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => openQuotaAdjustment(user)}
+                            disabled={!manageable}
+                          >
+                            额度
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => openEdit(user)}
+                            disabled={!manageable}
+                          >
+                            编辑
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
                 </TableBody>
               </Table>
             </div>
@@ -694,7 +718,7 @@ export default function UsersPage() {
                         current
                           ? {
                               ...current,
-                              status: status as "active" | "suspended",
+                              status: status as UserStatus,
                             }
                           : current
                       )
@@ -707,6 +731,7 @@ export default function UsersPage() {
                       <SelectGroup>
                         <SelectItem value="active">启用</SelectItem>
                         <SelectItem value="suspended">暂停</SelectItem>
+                        <SelectItem value="deleted">已注销</SelectItem>
                       </SelectGroup>
                     </SelectContent>
                   </Select>

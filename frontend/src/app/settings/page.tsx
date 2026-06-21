@@ -1,7 +1,6 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
 import {
   IconDeviceFloppy,
   IconLoader2,
@@ -63,7 +62,6 @@ type SettingsDialog =
   | null
 
 export default function SettingsPage() {
-  const router = useRouter()
   const user = useCurrentUser()
   const [accountUser, setAccountUser] = useState<User | null>(null)
   const [config, setConfig] = useState<MimoConfig>(defaultConfig)
@@ -128,7 +126,7 @@ export default function SettingsPage() {
         toast.error("LinuxDo 绑定会话已失效")
       }
     }
-  }, [router])
+  }, [])
 
   function syncUser(nextUser: User) {
     setAccountUser(nextUser)
@@ -348,7 +346,7 @@ export default function SettingsPage() {
       })
       clearSession()
       toast.success("账号已注销")
-      router.replace("/login")
+      window.location.replace("/login")
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "账号注销失败")
     } finally {

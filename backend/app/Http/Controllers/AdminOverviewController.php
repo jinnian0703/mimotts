@@ -6,6 +6,7 @@ use App\Models\AudioJob;
 use App\Models\AuditLog;
 use App\Models\SystemSetting;
 use App\Models\User;
+use App\Services\AccountDeletionService;
 use App\Services\AuditLogger;
 use App\Services\AudioJobPayloadSummary;
 use App\Services\AudioRetentionService;
@@ -68,26 +69,58 @@ class AdminOverviewController
         return response()->json($this->paginateUserQuery($query, $page, $perPage));
     }
 
-    public function updateUser(Request $request, User $user, BillingConfigService $billing, QuotaService $quota): JsonResponse
+    public function updateUser(
+        Request $request,
+        User $user,
+        BillingConfigService $billing,
+        QuotaService $quota,
+        AccountDeletionService $deletion
+    ): JsonResponse
     {
         $planIds = $this->planIds($billing);
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'email' => ['nullable', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
             'role' => ['required', Rule::in(['admin', 'user'])],
-            'status' => ['required', Rule::in(['active', 'suspended'])],
+            'status' => ['required', Rule::in([User::STATUS_ACTIVE, User::STATUS_SUSPENDED, User::STATUS_DELETED])],
             'plan_id' => ['nullable', 'string', 'max:64', Rule::in($planIds)],
             'quota_balance' => ['nullable', 'integer', 'min:0'],
             'quota_adjustment_reason' => ['required_with:quota_balance', 'nullable', 'string', 'max:255'],
         ]);
 
-        if ($user->id === $request->user()->id && ($data['role'] !== 'admin' || $data['status'] === 'suspended')) {
+        if ($user->id === $request->user()->id && ($data['role'] !== 'admin' || $data['status'] !== User::STATUS_ACTIVE)) {
             return response()->json([
                 'error' => [
                     'code' => 'SelfProtection',
                     'message' => '不能暂停或降权当前账号',
                 ],
             ], 422);
+        }
+
+        if ($user->isDeleted()) {
+            return response()->json([
+                'error' => [
+                    'code' => 'AccountDeleted',
+                    'message' => '已注销账号不能编辑',
+                ],
+            ], 422);
+        }
+
+        if ($data['status'] === User::STATUS_DELETED) {
+            if ($user->is_admin && User::query()->where('is_admin', true)->activeStatus()->count() <= 1) {
+                return response()->json([
+                    'error' => [
+                        'code' => 'LastAdminAccount',
+                        'message' => '最后一个管理员账号不能注销',
+                    ],
+                ], 422);
+            }
+
+            $deletion->markDeleted($user);
+
+            return response()->json([
+                'user' => $this->serializeUser($user->fresh()),
+            ]);
         }
 
         $email = $user->email;
@@ -129,6 +162,15 @@ class AdminOverviewController
 
     public function adjustQuota(Request $request, User $user, QuotaService $quota, AuditLogger $audit): JsonResponse
     {
+        if ($user->isDeleted()) {
+            return response()->json([
+                'error' => [
+                    'code' => 'AccountDeleted',
+                    'message' => '已注销账号不能调整额度',
+                ],
+            ], 422);
+        }
+
         $data = $request->validate([
             'mode' => ['required', Rule::in(['add', 'subtract', 'set'])],
             'amount' => ['required', 'integer', 'min:0'],
@@ -205,10 +247,12 @@ class AdminOverviewController
 
         $query = User::query()->whereIn('id', $data['ids']);
         if ($data['action'] === 'activate') {
-            $query->update(['status' => 'active']);
+            $query->notDeleted();
+            $query->update(['status' => User::STATUS_ACTIVE]);
         } elseif ($data['action'] === 'suspend') {
             $query->where('id', '<>', $request->user()->id);
-            $query->update(['status' => 'suspended']);
+            $query->notDeleted();
+            $query->update(['status' => User::STATUS_SUSPENDED]);
         } elseif ($data['action'] === 'set_plan') {
             $plan = $this->planById($billing, $data['plan_id'] ?? null);
             if (! $plan) {
@@ -220,7 +264,7 @@ class AdminOverviewController
                 ], 422);
             }
 
-            $query->get()->each(function (User $target) use ($plan, $quota, $request): void {
+            $query->notDeleted()->get()->each(function (User $target) use ($plan, $quota, $request): void {
                 $target->forceFill(['plan_id' => (string) $plan['id']])->save();
                 $this->grantUserPlanQuota($target, $plan, $quota, $request->user()->id);
             });
@@ -457,10 +501,9 @@ class AdminOverviewController
     {
         return [
             'total' => User::query()->count(),
-            'active' => User::query()
-                ->where(fn ($query) => $query->whereNull('status')->orWhere('status', '<>', 'suspended'))
-                ->count(),
-            'suspended' => User::query()->where('status', 'suspended')->count(),
+            'active' => User::query()->activeStatus()->count(),
+            'suspended' => User::query()->where('status', User::STATUS_SUSPENDED)->count(),
+            'deleted' => User::query()->where('status', User::STATUS_DELETED)->count(),
             'verified' => User::query()->whereNotNull('email_verified_at')->count(),
             'linuxdo_linked' => User::query()->whereNotNull('linuxdo_id')->count(),
         ];
@@ -621,12 +664,12 @@ class AdminOverviewController
             $query->where('is_admin', $role === 'admin');
         }
 
-        if ($status === 'active') {
-            $query->where(fn ($statusQuery) => $statusQuery
-                ->whereNull('status')
-                ->orWhere('status', '<>', 'suspended'));
-        } elseif ($status === 'suspended') {
-            $query->where('status', 'suspended');
+        if ($status === User::STATUS_ACTIVE) {
+            $query->activeStatus();
+        } elseif ($status === User::STATUS_SUSPENDED) {
+            $query->where('status', User::STATUS_SUSPENDED);
+        } elseif ($status === User::STATUS_DELETED) {
+            $query->where('status', User::STATUS_DELETED);
         }
 
         if ($planId === '__none') {

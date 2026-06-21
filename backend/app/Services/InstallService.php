@@ -16,7 +16,7 @@ class InstallService
 
     public function isInstalled(): bool
     {
-        return User::where('is_admin', true)->exists()
+        return User::where('is_admin', true)->notDeleted()->exists()
             && SystemSetting::where('key', 'installation')->exists();
     }
 
@@ -26,7 +26,7 @@ class InstallService
         $linuxDoConfig = $this->linuxDoConfig();
         $linuxDoConfigured = (bool) ($linuxDoConfig['configured'] ?? false);
         $linuxDoLoginEnabled = $linuxDoConfigured && (bool) ($linuxDoConfig['enabled'] ?? true);
-        $adminBound = User::where('is_admin', true)->exists();
+        $adminBound = User::where('is_admin', true)->notDeleted()->exists();
         $installed = $adminBound && SystemSetting::where('key', 'installation')->exists();
         $mimoConfigured = (bool) $this->mimoConfig()['api_key'];
         $missingConfig = $this->missingConfig($installed, $mimoConfigured, $linuxDoLoginEnabled, $emailConfig);

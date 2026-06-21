@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import Image from "next/image"
-import { usePathname, useRouter } from "next/navigation"
+import { usePathname } from "next/navigation"
 import { useEffect, useState } from "react"
 import {
   IconAdjustments,
@@ -72,7 +72,6 @@ function getInitialBrandState() {
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
-  const router = useRouter()
   const user = useCurrentUser()
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [desktopNavCollapsed, setDesktopNavCollapsed] = useState(false)
@@ -121,7 +120,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   async function handleLogout() {
     await api.logout().catch(() => undefined)
     clearSession()
-    router.replace("/login")
+    window.location.replace("/login")
   }
 
   if (isPublic) {

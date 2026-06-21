@@ -12,6 +12,10 @@ use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable
 {
+    public const STATUS_ACTIVE = 'active';
+    public const STATUS_SUSPENDED = 'suspended';
+    public const STATUS_DELETED = 'deleted';
+
     use HasApiTokens;
     use HasFactory;
     use Notifiable;
@@ -76,6 +80,30 @@ class User extends Authenticatable
     public function getHasPasswordAttribute(): bool
     {
         return ! empty($this->attributes['password'] ?? null);
+    }
+
+    public function isDeleted(): bool
+    {
+        return $this->status === self::STATUS_DELETED;
+    }
+
+    public function isSuspended(): bool
+    {
+        return $this->status === self::STATUS_SUSPENDED;
+    }
+
+    public function scopeNotDeleted($query)
+    {
+        return $query->where(fn ($statusQuery) => $statusQuery
+            ->whereNull('status')
+            ->orWhere('status', '<>', self::STATUS_DELETED));
+    }
+
+    public function scopeActiveStatus($query)
+    {
+        return $query->where(fn ($statusQuery) => $statusQuery
+            ->whereNull('status')
+            ->orWhere('status', self::STATUS_ACTIVE));
     }
 
     public function audioJobs(): HasMany

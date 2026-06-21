@@ -514,7 +514,7 @@ class InstallController
     private function looksAdminBound(): bool
     {
         try {
-            return Schema::hasTable('users') && \App\Models\User::where('is_admin', true)->exists();
+            return Schema::hasTable('users') && \App\Models\User::where('is_admin', true)->notDeleted()->exists();
         } catch (Throwable $e) {
             return false;
         }

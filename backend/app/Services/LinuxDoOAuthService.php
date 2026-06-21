@@ -119,6 +119,8 @@ class LinuxDoOAuthService
         $defaultPlan = $billing->defaultPlan();
         $user = User::where('linuxdo_id', $linuxdoId)->first();
         $planId = $user ? $user->plan_id : ($defaultPlan['id'] ?? null);
+        $status = $user ? ($user->status ?: User::STATUS_ACTIVE) : User::STATUS_ACTIVE;
+        $loginDisabled = in_array($status, [User::STATUS_SUSPENDED, User::STATUS_DELETED], true);
 
         $attributes = [
             'name' => Arr::get($profile, 'name')
@@ -126,9 +128,9 @@ class LinuxDoOAuthService
                 ?? 'LinuxDo 用户 '.Str::limit($linuxdoId, 8, ''),
             'email' => $email,
             'email_verified_at' => $email ? now() : null,
-            'status' => $user ? ($user->status ?: 'active') : 'active',
+            'status' => $status,
             'plan_id' => $planId,
-            'last_login_at' => now(),
+            'last_login_at' => $loginDisabled ? ($user ? $user->last_login_at : null) : now(),
         ];
 
         if ($avatarUrl !== null) {

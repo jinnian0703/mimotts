@@ -104,6 +104,7 @@ const emptyUserStats: DashboardUserStats = {
   total: 0,
   active: 0,
   suspended: 0,
+  deleted: 0,
   verified: 0,
   linuxdo_linked: 0,
   linuxDoLinked: 0,
@@ -239,6 +240,7 @@ export default function DashboardPage() {
     billing.plans.find((plan) => plan.id === billing.default_plan_id) ?? null
   const activeUsers = userStats.active
   const suspendedUsers = userStats.suspended
+  const deletedUsers = userStats.deleted ?? 0
   const verifiedUsers = userStats.verified
   const linuxDoLinkedUsers =
     userStats.linuxDoLinked ?? userStats.linuxdo_linked
@@ -582,6 +584,11 @@ export default function DashboardPage() {
                     emphasis={suspendedUsers > 0 ? "negative" : "positive"}
                   />
                   <StatusLine
+                    label="已注销"
+                    value={`${deletedUsers}`}
+                    emphasis={deletedUsers > 0 ? "negative" : "positive"}
+                  />
+                  <StatusLine
                     label="邮箱验证"
                     value={`${verifiedUsers}`}
                     icon={<IconMailCheck className="size-4" />}
@@ -657,9 +664,17 @@ export default function DashboardPage() {
                   <StatusLine label="账户名称" value={user?.name ?? "-"} />
                   <StatusLine
                     label="账户状态"
-                    value={user?.status === "suspended" ? "已暂停" : "正常"}
+                    value={
+                      user?.status === "deleted"
+                        ? "已注销"
+                        : user?.status === "suspended"
+                          ? "已暂停"
+                          : "正常"
+                    }
                     emphasis={
-                      user?.status === "suspended" ? "negative" : "positive"
+                      user?.status === "suspended" || user?.status === "deleted"
+                        ? "negative"
+                        : "positive"
                     }
                   />
                   <StatusLine

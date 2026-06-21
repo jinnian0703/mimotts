@@ -76,13 +76,8 @@ class AuthController
 
         $user = $oauth->syncUser($profile);
 
-        if ($user->status === 'suspended') {
-            return response()->json([
-                'error' => [
-                    'code' => 'AccountSuspended',
-                    'message' => '账号已暂停',
-                ],
-            ], 403);
+        if ($response = $this->accountDisabledResponse($user)) {
+            return $response;
         }
 
         Auth::login($user, true);
@@ -273,21 +268,16 @@ class AuthController
             ], 401);
         }
 
+        if ($response = $this->accountDisabledResponse($user)) {
+            return $response;
+        }
+
         $emailConfig = $install->emailAuthConfig();
         if (! $emailConfig['enabled'] && ! $user->is_admin) {
             return response()->json([
                 'error' => [
                     'code' => 'EmailLoginDisabled',
                     'message' => '邮箱登录未启用',
-                ],
-            ], 403);
-        }
-
-        if ($user->status === 'suspended') {
-            return response()->json([
-                'error' => [
-                    'code' => 'AccountSuspended',
-                    'message' => '账号已暂停',
                 ],
             ], 403);
         }
@@ -363,13 +353,8 @@ class AuthController
             ], 419);
         }
 
-        if ($user->status === 'suspended') {
-            return response()->json([
-                'error' => [
-                    'code' => 'AccountSuspended',
-                    'message' => '账号已暂停',
-                ],
-            ], 403);
+        if ($response = $this->accountDisabledResponse($user)) {
+            return $response;
         }
 
         if (! $security->verifyTwoFactorCode($user, $data['code'])) {
@@ -409,6 +394,10 @@ class AuthController
             ], 422);
         }
 
+        if ($response = $this->accountDisabledResponse($user)) {
+            return $response;
+        }
+
         Auth::login($user, true);
         $request->session()->regenerate();
         $audit->recordForUser($user, $request, 'auth.email_verified', ['provider' => 'email']);
@@ -434,6 +423,29 @@ class AuthController
                 'error' => [
                     'code' => 'EmailLoginDisabled',
                     'message' => '邮箱登录未启用',
+                ],
+            ], 403);
+        }
+
+        return null;
+    }
+
+    private function accountDisabledResponse(User $user): ?JsonResponse
+    {
+        if ($user->status === User::STATUS_DELETED) {
+            return response()->json([
+                'error' => [
+                    'code' => 'AccountDeleted',
+                    'message' => '账号已注销',
+                ],
+            ], 403);
+        }
+
+        if ($user->status === User::STATUS_SUSPENDED) {
+            return response()->json([
+                'error' => [
+                    'code' => 'AccountSuspended',
+                    'message' => '账号已暂停',
                 ],
             ], 403);
         }

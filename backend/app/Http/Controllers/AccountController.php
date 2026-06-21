@@ -2,9 +2,9 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\AudioFile;
 use App\Models\User;
 use App\Services\AccountSecurityService;
+use App\Services\AccountDeletionService;
 use App\Services\AuditLogger;
 use App\Services\EmailVerificationService;
 use App\Services\InstallService;
@@ -13,9 +13,7 @@ use App\Support\DisplayTime;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
@@ -245,7 +243,7 @@ class AccountController
         ]);
     }
 
-    public function destroy(Request $request, AuditLogger $audit): JsonResponse
+    public function destroy(Request $request, AuditLogger $audit, AccountDeletionService $deletion): JsonResponse
     {
         $user = $request->user();
         $data = $request->validate([
@@ -262,7 +260,7 @@ class AccountController
             ]);
         }
 
-        if ($user->is_admin && User::query()->where('is_admin', true)->count() <= 1) {
+        if ($user->is_admin && User::query()->where('is_admin', true)->activeStatus()->count() <= 1) {
             return response()->json([
                 'error' => [
                     'code' => 'LastAdminAccount',
@@ -272,17 +270,7 @@ class AccountController
         }
 
         $audit->record($request, 'account.delete');
-
-        DB::transaction(function () use ($user): void {
-            AudioFile::query()
-                ->where('user_id', $user->id)
-                ->get()
-                ->each(function (AudioFile $file): void {
-                    Storage::disk($file->disk)->delete($file->path);
-                });
-
-            $user->delete();
-        });
+        $deletion->markDeleted($user);
 
         Auth::guard('web')->logout();
         $request->session()->invalidate();

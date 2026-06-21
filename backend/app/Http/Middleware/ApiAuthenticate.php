@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\User;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -19,7 +20,16 @@ class ApiAuthenticate
             ], 401);
         }
 
-        if ($request->user()->status === 'suspended') {
+        if ($request->user()->status === User::STATUS_DELETED) {
+            return response()->json([
+                'error' => [
+                    'code' => 'AccountDeleted',
+                    'message' => '账号已注销',
+                ],
+            ], 403);
+        }
+
+        if ($request->user()->status === User::STATUS_SUSPENDED) {
             return response()->json([
                 'error' => [
                     'code' => 'AccountSuspended',

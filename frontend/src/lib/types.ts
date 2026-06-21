@@ -1,11 +1,12 @@
 export type Role = "admin" | "user"
+export type UserStatus = "active" | "suspended" | "deleted"
 
 export type User = {
   id: string
   name: string
   email?: string
   role: Role
-  status?: "active" | "suspended"
+  status?: UserStatus
   planId?: string | null
   plan_id?: string | null
   quotaBalance?: number
@@ -289,6 +290,7 @@ export type DashboardUserStats = {
   total: number
   active: number
   suspended: number
+  deleted?: number
   verified: number
   linuxdo_linked: number
   linuxDoLinked?: number

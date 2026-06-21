@@ -29,6 +29,7 @@ import type {
   UpdateStatus,
   UpdateUpgradeResult,
   User,
+  UserStatus,
 } from "@/lib/types"
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "/api"
@@ -52,7 +53,7 @@ type UserPageParams = {
   pageSize?: number
   query?: string
   role?: Role | "all"
-  status?: "active" | "suspended" | "all"
+  status?: UserStatus | "all"
   planId?: string
   email?: "verified" | "unverified" | "all"
   linuxDo?: "linked" | "unlinked" | "all"
@@ -763,7 +764,7 @@ export const api = {
       name: string
       email?: string | null
       role: Role
-      status: "active" | "suspended"
+      status: UserStatus
       plan_id?: string | null
       quota_balance?: number
       quota_adjustment_reason?: string
