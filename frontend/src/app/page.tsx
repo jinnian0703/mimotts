@@ -15,7 +15,7 @@ import { useCurrentUser } from "@/components/auth-gate"
 import { Button } from "@/components/ui/button"
 import { useSiteBrand } from "@/lib/use-site-brand"
 
-const modules = ["语音转文字", "文字转语音", "音色设计", "声音克隆"]
+const modules = ["语音识别", "语音合成", "音色设计", "声音克隆"]
 
 const capabilities = [
   {

@@ -32,8 +32,8 @@ class QuotaService
     public function moduleLabels(): array
     {
         return [
-            'asr' => '语音转文字',
-            'tts' => '文字转语音',
+            'asr' => '语音识别',
+            'tts' => '语音合成',
             'voice_design' => '音色设计',
             'voice_clone' => '声音克隆',
         ];

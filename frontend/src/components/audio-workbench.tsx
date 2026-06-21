@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import {
   IconClipboardList,
+  IconDeviceFloppy,
   IconFileUpload,
+  IconKey,
   IconLoader2,
   IconPlayerPlay,
   IconRefresh,
@@ -17,6 +19,7 @@ import type {
   AudioModule,
   AudioRetentionConfig,
   AudioTask,
+  MimoConfig,
   PaginationMeta,
 } from "@/lib/types"
 import { StatusBadge } from "@/components/status-badge"
@@ -199,6 +202,12 @@ const recognitionAudioMaxLabel = "7 MB"
 const recognitionBase64MaxLabel = "10 MB"
 const taskTitleMaxLength = 20
 const defaultPageSize = 20
+const defaultMimoConfig: MimoConfig = {
+  base_url: "https://api.xiaomimimo.com/v1",
+  api_key: "",
+  enabled: false,
+  configured: false,
+}
 const defaultTaskPagination: PaginationMeta = {
   page: 1,
   perPage: defaultPageSize,
@@ -376,9 +385,10 @@ export function AudioWorkbench() {
               <Metric label="失败" value={countByStatus(tasks, "failed")} />
             </div>
           </CardContent>
-          <CardFooter>
+          <CardFooter className="flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
             <Button
               variant="outline"
+              className="w-full sm:w-auto"
               onClick={() => refreshTasks()}
               disabled={loading}
             >
@@ -389,6 +399,7 @@ export function AudioWorkbench() {
               )}
               刷新任务
             </Button>
+            <PersonalApiSettings />
           </CardFooter>
         </Card>
       </div>
@@ -405,6 +416,184 @@ export function AudioWorkbench() {
         onDeleted={handleTaskDeleted}
       />
     </div>
+  )
+}
+
+function PersonalApiSettings() {
+  const [config, setConfig] = useState<MimoConfig>(defaultMimoConfig)
+  const [loading, setLoading] = useState(true)
+  const [open, setOpen] = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    let active = true
+
+    api
+      .userMimoConfig()
+      .then((value) => {
+        if (!active) {
+          return
+        }
+
+        setConfig({ ...defaultMimoConfig, ...value, api_key: "" })
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (active) {
+          setLoading(false)
+        }
+      })
+
+    return () => {
+      active = false
+    }
+  }, [])
+
+  async function savePersonalApi() {
+    setSaving(true)
+
+    try {
+      const saved = await api.saveUserMimoConfig(config)
+      setConfig({ ...defaultMimoConfig, ...saved, api_key: "" })
+      toast.success("个人 API 设置已保存")
+      setOpen(false)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "个人 API 设置保存失败")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const configured = Boolean(config.configured)
+  const enabled = Boolean(config.enabled)
+  const missingRequiredKey = !configured && !(config.api_key ?? "").trim()
+  const statusLabel = loading
+    ? "加载中"
+    : enabled
+      ? "已启用"
+      : configured
+        ? "未启用"
+        : "未配置"
+  const summary = loading
+    ? "读取个人 API 设置"
+    : enabled
+      ? "个人配置，不计入额度"
+      : configured
+        ? "已保存，当前使用系统配置"
+        : "当前使用系统配置"
+
+  return (
+    <>
+      <div className="flex min-w-0 flex-1 items-center justify-between gap-3 rounded-lg border bg-background/70 px-3 py-2 sm:max-w-[230px]">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+            <IconKey className="size-4" />
+          </span>
+          <div className="min-w-0">
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="shrink-0 text-sm font-medium">个人 API</span>
+              <Badge variant={enabled ? "secondary" : "outline"}>
+                {statusLabel}
+              </Badge>
+            </div>
+            <div className="truncate text-xs text-muted-foreground" title={summary}>
+              {summary}
+            </div>
+          </div>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={loading}
+          onClick={() => setOpen(true)}
+        >
+          <IconKey data-icon="inline-start" />
+          配置
+        </Button>
+      </div>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>个人 API 设置</DialogTitle>
+            <DialogDescription>
+              与设置页的接口配置同步，启用后优先使用个人 Mimo API。
+            </DialogDescription>
+          </DialogHeader>
+          <FieldGroup>
+            <Field orientation="horizontal">
+              <FieldContent>
+                <FieldLabel htmlFor="workbench-user-api-enabled">
+                  启用个人配置
+                </FieldLabel>
+                <FieldDescription>
+                  开启后任务使用个人 API，不消耗套餐额度。
+                </FieldDescription>
+              </FieldContent>
+              <Switch
+                id="workbench-user-api-enabled"
+                checked={enabled}
+                onCheckedChange={(nextEnabled) =>
+                  setConfig((current) => ({
+                    ...current,
+                    enabled: nextEnabled,
+                  }))
+                }
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="workbench-user-base-url">API 地址</FieldLabel>
+              <Input
+                id="workbench-user-base-url"
+                value={config.base_url ?? ""}
+                onChange={(event) =>
+                  setConfig((current) => ({
+                    ...current,
+                    base_url: event.target.value,
+                  }))
+                }
+                placeholder="https://api.xiaomimimo.com/v1"
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="workbench-user-api-key">API Key</FieldLabel>
+              <Input
+                id="workbench-user-api-key"
+                value={config.api_key ?? ""}
+                type="password"
+                onChange={(event) =>
+                  setConfig((current) => ({
+                    ...current,
+                    api_key: event.target.value,
+                  }))
+                }
+                placeholder={configured ? "保持当前密钥" : "输入密钥"}
+              />
+              <FieldDescription>
+                已配置时留空表示继续使用原密钥。
+              </FieldDescription>
+            </Field>
+          </FieldGroup>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpen(false)}>
+              取消
+            </Button>
+            <Button
+              onClick={savePersonalApi}
+              disabled={saving || missingRequiredKey}
+            >
+              {saving ? (
+                <IconLoader2 data-icon="inline-start" className="animate-spin" />
+              ) : (
+                <IconDeviceFloppy data-icon="inline-start" />
+              )}
+              保存
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }
 
@@ -642,7 +831,7 @@ function SynthesisFields() {
           ))}
         </div>
       </Field>
-      <FieldGroup className="grid gap-5 md:grid-cols-2 xl:grid-cols-6">
+      <FieldGroup className="grid gap-5 md:grid-cols-2 xl:grid-cols-5">
         <Field>
           <FieldLabel htmlFor="synthesis-delivery-mode">合成模式</FieldLabel>
           <Select
@@ -663,9 +852,6 @@ function SynthesisFields() {
               </SelectGroup>
             </SelectContent>
           </Select>
-          <FieldDescription>
-            唱歌会自动在文本开头加入官方标记。
-          </FieldDescription>
         </Field>
         <Field>
           <FieldLabel htmlFor="synthesis-style-preset">
@@ -686,20 +872,6 @@ function SynthesisFields() {
               </SelectGroup>
             </SelectContent>
           </Select>
-        </Field>
-        <Field className="xl:col-span-2">
-          <FieldLabel htmlFor="synthesis-style">风格指令</FieldLabel>
-          <Textarea
-            id="synthesis-style"
-            name="style_prompt"
-            placeholder="专业、清晰、稳定"
-            rows={3}
-            value={stylePrompt}
-            onChange={(event) => {
-              setStylePrompt(event.target.value)
-              setStylePreset("custom")
-            }}
-          />
         </Field>
         <Field>
           <FieldLabel htmlFor="synthesis-voice">音色</FieldLabel>
@@ -735,6 +907,20 @@ function SynthesisFields() {
           </Select>
         </Field>
       </FieldGroup>
+      <Field>
+        <FieldLabel htmlFor="synthesis-style">风格指令</FieldLabel>
+        <Textarea
+          id="synthesis-style"
+          name="style_prompt"
+          placeholder="专业、清晰、稳定"
+          rows={3}
+          value={stylePrompt}
+          onChange={(event) => {
+            setStylePrompt(event.target.value)
+            setStylePreset("custom")
+          }}
+        />
+      </Field>
     </>
   )
 }
@@ -752,16 +938,16 @@ function VoiceDesignFields() {
           required
         />
       </Field>
-      <FieldGroup className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
-        <Field>
-          <FieldLabel htmlFor="design-script">试听文本</FieldLabel>
-          <Input
-            id="design-script"
-            name="text"
-            placeholder="用于生成样音的短文本"
-            required
-          />
-        </Field>
+      <Field>
+        <FieldLabel htmlFor="design-script">试听文本</FieldLabel>
+        <Input
+          id="design-script"
+          name="text"
+          placeholder="用于生成样音的短文本"
+          required
+        />
+      </Field>
+      <FieldGroup className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
         <SpeechRateField id="design-speech-rate" />
         <Field>
           <FieldHelpLabel

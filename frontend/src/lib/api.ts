@@ -318,6 +318,29 @@ function mapUserPagination(data: UserPageResponse): PaginatedUsers {
   }
 }
 
+function userMimoConfigPayload(config: MimoConfig & { api_key?: string }) {
+  const payload: {
+    api_key?: string
+    base_url?: string | null
+    enabled?: boolean
+  } = {}
+  const apiKey = config.api_key?.trim()
+
+  if (apiKey) {
+    payload.api_key = apiKey
+  }
+
+  if (config.base_url !== undefined) {
+    payload.base_url = config.base_url || null
+  }
+
+  if (config.enabled !== undefined) {
+    payload.enabled = config.enabled
+  }
+
+  return payload
+}
+
 export const api = {
   installStatus() {
     return request<InstallStatus>("/install/status").then((status) => ({
@@ -672,7 +695,7 @@ export const api = {
   saveUserMimoConfig(config: MimoConfig & { api_key?: string }) {
     return request<{ config: MimoConfig }>("/user/api-config", {
       method: "PUT",
-      body: JSON.stringify(config),
+      body: JSON.stringify(userMimoConfigPayload(config)),
     }).then(({ config }) => config)
   },
   taskPage(params: TaskPageParams = {}) {

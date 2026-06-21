@@ -19,7 +19,7 @@ import {
 } from "@/lib/china-time"
 import { cn } from "@/lib/utils"
 import type { Announcement, AnnouncementLevel } from "@/lib/types"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Alert } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -316,77 +316,78 @@ export function AnnouncementStack() {
       <Alert
         key={current.id}
         className={cn(
-          "rounded-xl border shadow-sm animate-in fade-in-0 slide-in-from-bottom-1",
+          "min-h-11 rounded-lg border px-2.5 py-1.5 shadow-sm animate-in fade-in-0 slide-in-from-bottom-1 md:grid-cols-[auto_minmax(0,1fr)_auto] md:items-center md:gap-x-2 [&>svg]:row-span-1 [&>svg]:translate-y-0",
           levelClasses[current.level]
         )}
       >
         {icons[current.level]}
-        <AlertTitle className="flex min-w-0 flex-wrap items-center gap-2">
-          <span className="min-w-0 truncate" title={current.title}>
-            {current.title}
-          </span>
-          <Badge variant="outline" className="bg-white/55">
-            {levelLabels[current.level]}
-          </Badge>
-          {hasMultiple && (
-            <Badge variant="outline" className="bg-white/55">
-              {currentIndex + 1}/{announcements.length}
+        <div className="col-start-2 flex min-w-0 flex-col gap-0.5 md:flex-row md:items-center md:gap-2">
+          <div className="flex min-w-0 shrink-0 items-center gap-1.5 md:max-w-[34%]">
+            <span
+              className="truncate text-[13px] font-semibold leading-5"
+              title={current.title}
+            >
+              {current.title}
+            </span>
+            <Badge variant="outline" className="h-5 shrink-0 bg-white/55 px-1.5 text-[11px]">
+              {levelLabels[current.level]}
             </Badge>
-          )}
-        </AlertTitle>
-        <AlertDescription className="space-y-3">
+            {hasMultiple && (
+              <Badge variant="outline" className="h-5 shrink-0 bg-white/55 px-1.5 text-[11px]">
+                {currentIndex + 1}/{announcements.length}
+              </Badge>
+            )}
+          </div>
           <p
-            className="line-clamp-2 cursor-help whitespace-pre-wrap"
+            className="line-clamp-1 min-w-0 cursor-help text-xs leading-5 opacity-85"
             title={current.content}
           >
             {current.content}
           </p>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div
-              className="min-w-0 truncate text-xs opacity-80"
-              title={period ?? "持续发布"}
+          <span
+            className="hidden shrink-0 truncate text-xs leading-5 opacity-70 xl:block xl:max-w-52"
+            title={period ?? "持续发布"}
+          >
+            {period ?? "持续发布"}
+          </span>
+        </div>
+        {hasMultiple && (
+          <div className="col-start-2 mt-1 flex items-center gap-1 justify-self-start md:col-start-3 md:row-start-1 md:mt-0">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-xs"
+              onClick={goToPrevious}
+              aria-label="上一条公告"
             >
-              {period ?? "持续发布"}
+              <IconChevronLeft />
+            </Button>
+            <div className="flex items-center gap-1">
+              {announcements.map((announcement, index) => (
+                <button
+                  key={announcement.id}
+                  type="button"
+                  className={cn(
+                    "size-1.5 rounded-full bg-current opacity-30 transition",
+                    index === currentIndex && "w-4 opacity-90"
+                  )}
+                  aria-label={`切换到第 ${index + 1} 条公告`}
+                  aria-current={index === currentIndex}
+                  onClick={() => setActiveIndex(index)}
+                />
+              ))}
             </div>
-            {hasMultiple && (
-              <div className="flex items-center gap-2">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-xs"
-                  onClick={goToPrevious}
-                  aria-label="上一条公告"
-                >
-                  <IconChevronLeft />
-                </Button>
-                <div className="flex items-center gap-1">
-                  {announcements.map((announcement, index) => (
-                    <button
-                      key={announcement.id}
-                      type="button"
-                      className={cn(
-                        "size-1.5 rounded-full bg-current opacity-30 transition",
-                        index === currentIndex && "w-4 opacity-90"
-                      )}
-                      aria-label={`切换到第 ${index + 1} 条公告`}
-                      aria-current={index === currentIndex}
-                      onClick={() => setActiveIndex(index)}
-                    />
-                  ))}
-                </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-xs"
-                  onClick={goToNext}
-                  aria-label="下一条公告"
-                >
-                  <IconChevronRight />
-                </Button>
-              </div>
-            )}
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-xs"
+              onClick={goToNext}
+              aria-label="下一条公告"
+            >
+              <IconChevronRight />
+            </Button>
           </div>
-        </AlertDescription>
+        )}
       </Alert>
     </div>
   )

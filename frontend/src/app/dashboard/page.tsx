@@ -115,8 +115,8 @@ const emptySettingsStats: DashboardSettingsStats = {
 }
 
 const moduleLabels: Record<AudioModule, string> = {
-  "speech-recognition": "语音转文字",
-  "speech-synthesis": "文字转语音",
+  "speech-recognition": "语音识别",
+  "speech-synthesis": "语音合成",
   "voice-design": "音色设计",
   "voice-clone": "声音克隆",
 }

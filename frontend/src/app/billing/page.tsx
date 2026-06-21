@@ -183,8 +183,8 @@ export default function BillingPage() {
         </CardHeader>
         <CardContent>
           <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-            <UsageCost label="语音转文字" value={quota.usage_costs.asr} />
-            <UsageCost label="文字转语音" value={quota.usage_costs.tts} />
+            <UsageCost label="语音识别" value={quota.usage_costs.asr} />
+            <UsageCost label="语音合成" value={quota.usage_costs.tts} />
             <UsageCost label="音色设计" value={quota.usage_costs.voice_design} />
             <UsageCost label="声音克隆" value={quota.usage_costs.voice_clone} />
           </div>

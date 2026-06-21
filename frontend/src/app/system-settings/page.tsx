@@ -238,14 +238,14 @@ const usageCostItems: Array<{
 }> = [
   {
     key: "asr",
-    label: "语音转文字",
-    help: "系统接口完成一次语音转文字任务时扣除的额度。",
+    label: "语音识别",
+    help: "系统接口完成一次语音识别任务时扣除的额度。",
     icon: IconWaveSine,
   },
   {
     key: "tts",
-    label: "文字转语音",
-    help: "系统接口完成一次文字转语音任务时扣除的额度。",
+    label: "语音合成",
+    help: "系统接口完成一次语音合成任务时扣除的额度。",
     icon: IconMicrophone,
   },
   {
