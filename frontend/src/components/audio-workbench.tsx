@@ -385,10 +385,11 @@ export function AudioWorkbench() {
               <Metric label="失败" value={countByStatus(tasks, "failed")} />
             </div>
           </CardContent>
-          <CardFooter className="flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <CardFooter className="flex-col items-stretch gap-3">
+            <PersonalApiSettings />
             <Button
               variant="outline"
-              className="w-full sm:w-auto"
+              className="w-full sm:w-fit"
               onClick={() => refreshTasks()}
               disabled={loading}
             >
@@ -399,7 +400,6 @@ export function AudioWorkbench() {
               )}
               刷新任务
             </Button>
-            <PersonalApiSettings />
           </CardFooter>
         </Card>
       </div>
@@ -484,7 +484,7 @@ function PersonalApiSettings() {
 
   return (
     <>
-      <div className="flex min-w-0 flex-1 items-center justify-between gap-3 rounded-lg border bg-background/70 px-3 py-2 sm:max-w-[230px]">
+      <div className="flex w-full min-w-0 items-center justify-between gap-3 rounded-lg border bg-background/70 px-3 py-2">
         <div className="flex min-w-0 items-center gap-2">
           <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
             <IconKey className="size-4" />

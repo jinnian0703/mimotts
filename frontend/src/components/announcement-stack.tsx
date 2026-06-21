@@ -316,7 +316,7 @@ export function AnnouncementStack() {
       <Alert
         key={current.id}
         className={cn(
-          "min-h-11 rounded-lg border px-2.5 py-1.5 shadow-sm animate-in fade-in-0 slide-in-from-bottom-1 md:grid-cols-[auto_minmax(0,1fr)_auto] md:items-center md:gap-x-2 [&>svg]:row-span-1 [&>svg]:translate-y-0",
+          "min-h-11 rounded-lg border px-2.5 py-1.5 shadow-sm animate-in fade-in-0 slide-in-from-bottom-1 md:grid-cols-[auto_minmax(0,1fr)_auto] md:items-center md:gap-x-2 xl:grid-cols-[auto_minmax(0,1fr)_auto_auto] [&>svg]:row-span-1 [&>svg]:translate-y-0",
           levelClasses[current.level]
         )}
       >
@@ -344,12 +344,6 @@ export function AnnouncementStack() {
           >
             {current.content}
           </p>
-          <span
-            className="hidden shrink-0 truncate text-xs leading-5 opacity-70 xl:block xl:max-w-52"
-            title={period ?? "持续发布"}
-          >
-            {period ?? "持续发布"}
-          </span>
         </div>
         {hasMultiple && (
           <div className="col-start-2 mt-1 flex items-center gap-1 justify-self-start md:col-start-3 md:row-start-1 md:mt-0">
@@ -388,6 +382,15 @@ export function AnnouncementStack() {
             </Button>
           </div>
         )}
+        <span
+          className={cn(
+            "col-start-2 mt-1 hidden shrink-0 truncate text-xs leading-5 opacity-70 md:row-start-1 md:mt-0 md:block md:justify-self-end md:max-w-52",
+            hasMultiple && "md:hidden xl:col-start-4 xl:block"
+          )}
+          title={period ?? "持续发布"}
+        >
+          {period ?? "持续发布"}
+        </span>
       </Alert>
     </div>
   )
