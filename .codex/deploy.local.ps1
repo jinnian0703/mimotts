@@ -1,0 +1,8 @@
+$MimoDeployHost = "165.22.173.107"
+$MimoDeployUser = "root"
+$MimoDeployTarget = "/www/wwwroot/mimotts.jinnian.eu.cc"
+$MimoDeploySiteName = "mimotts.jinnian.eu.cc"
+$MimoDeployKeyPath = "D:\jinnian\Downloads\165.22.173.107_id_ed25519"
+$MimoPhpPath = "F:\codex\cache\php\8.2\php.exe"
+$MimoSmokeUrl = "https://mimotts.jlen.top/"
+$MimoInstallStatusUrl = "https://mimotts.jlen.top/api.php?r=/install/status"

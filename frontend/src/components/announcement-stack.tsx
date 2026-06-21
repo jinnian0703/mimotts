@@ -321,7 +321,7 @@ export function AnnouncementStack() {
         )}
       >
         {icons[current.level]}
-        <div className="col-start-2 flex min-w-0 flex-col gap-0.5 md:flex-row md:items-center md:gap-2">
+        <div className="col-start-2 row-start-1 flex min-w-0 flex-col gap-0.5 md:flex-row md:items-center md:gap-2">
           <div className="flex min-w-0 shrink-0 items-center gap-1.5 md:max-w-[34%]">
             <span
               className="truncate text-[13px] font-semibold leading-5"
@@ -384,7 +384,7 @@ export function AnnouncementStack() {
         )}
         <span
           className={cn(
-            "col-start-2 mt-1 hidden shrink-0 truncate text-xs leading-5 opacity-70 md:row-start-1 md:mt-0 md:block md:justify-self-end md:max-w-52",
+            "col-start-2 mt-1 hidden shrink-0 truncate text-xs leading-5 opacity-70 md:col-start-3 md:row-start-1 md:mt-0 md:block md:justify-self-end md:max-w-52",
             hasMultiple && "md:hidden xl:col-start-4 xl:block"
           )}
           title={period ?? "持续发布"}
