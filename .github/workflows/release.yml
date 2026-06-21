@@ -20,7 +20,7 @@ jobs:
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
-          php-version: "7.4"
+          php-version: "8.2"
           extensions: bcmath, intl, mbstring, pdo_mysql, pdo_sqlite, zip
 
       - name: Setup Node
