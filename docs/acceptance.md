@@ -4,7 +4,7 @@ This checklist is the release gate for the Mimo Docker deployment. Each item mus
 
 ## Verification Commands
 
-Run from `F:\codex\MUISC\mimo`:
+Run from the repository root:
 
 ```powershell
 .\scripts\verify.ps1

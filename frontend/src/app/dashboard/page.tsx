@@ -330,8 +330,8 @@ export default function DashboardPage() {
       />
 
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1.42fr)_360px]">
-        <Card className="relative overflow-hidden border border-border/70 bg-[linear-gradient(135deg,rgba(13,87,79,0.06),rgba(255,255,255,0.92)_52%,rgba(223,196,93,0.12))] shadow-sm">
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(13,87,79,0.12),transparent_28%),linear-gradient(rgba(255,255,255,0.56),rgba(255,255,255,0.56))]" />
+        <Card className="relative overflow-hidden border border-border/70 bg-[linear-gradient(135deg,rgba(13,87,79,0.06),rgba(255,255,255,0.92)_52%,rgba(223,196,93,0.12))] shadow-sm dark:border-white/10 dark:bg-[linear-gradient(135deg,rgba(124,216,194,0.12),rgba(21,38,42,0.96)_50%,rgba(184,148,50,0.10))] dark:shadow-[0_18px_60px_rgba(0,0,0,0.22)]">
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(13,87,79,0.12),transparent_28%),linear-gradient(rgba(255,255,255,0.56),rgba(255,255,255,0.56))] dark:bg-[radial-gradient(circle_at_top_right,rgba(124,216,194,0.18),transparent_30%),radial-gradient(circle_at_bottom_left,rgba(223,196,93,0.11),transparent_34%),linear-gradient(rgba(6,18,21,0.34),rgba(6,18,21,0.34))]" />
           <CardContent className="relative space-y-4 px-5 py-5 sm:px-6 sm:py-6">
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant="secondary">
@@ -772,7 +772,7 @@ function QuickLinkTile({
   return (
     <Link
       href={href}
-      className="group flex items-center justify-between gap-3 rounded-2xl border border-border/70 bg-white/75 px-4 py-4 shadow-sm transition hover:border-primary/35 hover:bg-white"
+      className="group flex items-center justify-between gap-3 rounded-2xl border border-border/70 bg-white/75 px-4 py-4 shadow-sm transition hover:border-primary/35 hover:bg-white dark:border-white/10 dark:bg-white/[0.055] dark:shadow-none dark:hover:border-primary/35 dark:hover:bg-white/[0.085]"
     >
       <div className="min-w-0">
         <div className="font-medium" title={title}>
@@ -782,7 +782,7 @@ function QuickLinkTile({
           {value}
         </div>
       </div>
-      <div className="flex size-9 items-center justify-center rounded-full bg-primary/10 text-primary transition group-hover:bg-primary group-hover:text-primary-foreground">
+      <div className="flex size-9 items-center justify-center rounded-full bg-primary/10 text-primary transition group-hover:bg-primary group-hover:text-primary-foreground dark:bg-primary/15 dark:group-hover:bg-primary dark:group-hover:text-primary-foreground">
         <IconArrowRight className="size-4" />
       </div>
     </Link>

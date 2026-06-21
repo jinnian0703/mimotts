@@ -42,13 +42,13 @@ const icons: Record<AnnouncementLevel, React.ReactNode> = {
 }
 
 const levelClasses: Record<AnnouncementLevel, string> = {
-  info: "border-[rgba(13,87,79,0.14)] bg-[rgba(240,248,247,0.9)] text-[oklch(0.23_0.03_190)]",
+  info: "border-[rgba(13,87,79,0.14)] bg-[rgba(240,248,247,0.9)] text-[oklch(0.23_0.03_190)] dark:border-primary/20 dark:bg-primary/10 dark:text-foreground",
   success:
-    "border-[rgba(18,122,73,0.14)] bg-[rgba(239,249,243,0.92)] text-[oklch(0.3_0.06_155)]",
+    "border-[rgba(18,122,73,0.14)] bg-[rgba(239,249,243,0.92)] text-[oklch(0.3_0.06_155)] dark:border-emerald-300/20 dark:bg-emerald-400/10 dark:text-emerald-100",
   warning:
-    "border-[rgba(180,132,12,0.16)] bg-[rgba(255,249,233,0.96)] text-[oklch(0.42_0.08_85)]",
+    "border-[rgba(180,132,12,0.16)] bg-[rgba(255,249,233,0.96)] text-[oklch(0.42_0.08_85)] dark:border-amber-300/20 dark:bg-amber-300/10 dark:text-amber-100",
   destructive:
-    "border-[rgba(181,53,40,0.16)] bg-[rgba(255,241,240,0.96)] text-[oklch(0.47_0.12_28)]",
+    "border-[rgba(181,53,40,0.16)] bg-[rgba(255,241,240,0.96)] text-[oklch(0.47_0.12_28)] dark:border-destructive/25 dark:bg-destructive/15 dark:text-red-100",
 }
 
 const levelLabels: Record<AnnouncementLevel, string> = {
@@ -329,11 +329,11 @@ export function AnnouncementStack() {
             >
               {current.title}
             </span>
-            <Badge variant="outline" className="h-5 shrink-0 bg-white/55 px-1.5 text-[11px]">
+            <Badge variant="outline" className="h-5 shrink-0 bg-white/55 px-1.5 text-[11px] dark:border-white/10 dark:bg-white/[0.08]">
               {levelLabels[current.level]}
             </Badge>
             {hasMultiple && (
-              <Badge variant="outline" className="h-5 shrink-0 bg-white/55 px-1.5 text-[11px]">
+              <Badge variant="outline" className="h-5 shrink-0 bg-white/55 px-1.5 text-[11px] dark:border-white/10 dark:bg-white/[0.08]">
                 {currentIndex + 1}/{announcements.length}
               </Badge>
             )}
