@@ -5,6 +5,10 @@ export const fallbackSiteIconUrl = "/favicon.ico"
 export const defaultSiteBrand = {
   name: "MimoTTS",
   iconUrl: "",
+  subtitle: "集中管理语音识别、语音合成、音色设计、声音克隆、账户接入与套餐计费。",
+  icpRecord: "",
+  footerText: "",
+  supportEmail: "",
 }
 
 const cacheKey = "mimotts:site-brand"
@@ -20,6 +24,10 @@ export function normalizeSiteBrand(config: BasicInfoConfig): SiteBrand {
   return {
     name: config.system_name || config.site_title || defaultSiteBrand.name,
     iconUrl: (config.icon_url ?? config.iconUrl ?? "").trim(),
+    subtitle: (config.site_subtitle ?? "").trim() || defaultSiteBrand.subtitle,
+    icpRecord: (config.icp_record ?? "").trim(),
+    footerText: (config.footer_text ?? "").trim(),
+    supportEmail: (config.support_email ?? "").trim(),
   }
 }
 
@@ -39,6 +47,18 @@ export function readCachedSiteBrand(): SiteBrand | null {
     return {
       name: parsed.name || defaultSiteBrand.name,
       iconUrl: typeof parsed.iconUrl === "string" ? parsed.iconUrl.trim() : "",
+      subtitle:
+        typeof parsed.subtitle === "string" && parsed.subtitle.trim()
+          ? parsed.subtitle.trim()
+          : defaultSiteBrand.subtitle,
+      icpRecord:
+        typeof parsed.icpRecord === "string" ? parsed.icpRecord.trim() : "",
+      footerText:
+        typeof parsed.footerText === "string" ? parsed.footerText.trim() : "",
+      supportEmail:
+        typeof parsed.supportEmail === "string"
+          ? parsed.supportEmail.trim()
+          : "",
     }
   } catch {
     return null

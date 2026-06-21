@@ -666,4 +666,22 @@ class EmailAuthTest extends TestCase
                 && $request['to'] === ['receiver@example.com'];
         });
     }
+
+    public function test_account_email_update_reports_registered_email(): void
+    {
+        $user = User::factory()->create([
+            'email' => 'current@example.com',
+        ]);
+        User::factory()->create([
+            'email' => 'taken@example.com',
+        ]);
+
+        $this->actingAs($user)
+            ->putJson('/api/account/email', [
+                'email' => 'taken@example.com',
+            ])
+            ->assertStatus(422)
+            ->assertJsonPath('error.message', '该邮箱已被注册，无法绑定到当前账号')
+            ->assertJsonPath('error.fields.email.0', '该邮箱已被注册，无法绑定到当前账号');
+    }
 }

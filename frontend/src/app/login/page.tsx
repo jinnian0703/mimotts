@@ -26,11 +26,13 @@ import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
+import { useSiteBrand } from "@/lib/use-site-brand"
 
 type EmailMode = "login" | "register"
 
 export default function LoginPage() {
   const router = useRouter()
+  const brand = useSiteBrand()
   const [linuxDoPending, setLinuxDoPending] = useState(false)
   const [emailPending, setEmailPending] = useState(false)
   const [emailMode, setEmailMode] = useState<EmailMode>("login")
@@ -184,193 +186,201 @@ export default function LoginPage() {
 
   return (
     <main className="flex min-h-dvh items-center justify-center bg-muted/40 px-4 py-10">
-      <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardTitle>{cardTitle}</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-5">
-          {verificationMessage && (
-            <Alert>
-              <IconMailCheck />
-              <AlertTitle>{verificationMessage}</AlertTitle>
-            </Alert>
-          )}
-          {!twoFactorEmail && emailAuthEnabled && (
-            <ToggleGroup
-              type="single"
-              value={activeEmailMode}
-              onValueChange={(value) => {
-                if (
-                  value === "login" ||
-                  (registrationEnabled && value === "register")
-                ) {
-                  setEmailMode(value)
-                }
-              }}
-              className="w-full"
-            >
-              <ToggleGroupItem value="login" className="flex-1">
-                登录
-              </ToggleGroupItem>
-              {registrationEnabled && (
-                <ToggleGroupItem value="register" className="flex-1">
-                  注册
+      <div className="flex w-full max-w-md flex-col gap-5">
+        <div className="text-center">
+          <div className="font-heading text-2xl font-semibold">{brand.name}</div>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">
+            {brand.subtitle}
+          </p>
+        </div>
+        <Card className="w-full">
+          <CardHeader>
+            <CardTitle>{cardTitle}</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-5">
+            {verificationMessage && (
+              <Alert>
+                <IconMailCheck />
+                <AlertTitle>{verificationMessage}</AlertTitle>
+              </Alert>
+            )}
+            {!twoFactorEmail && emailAuthEnabled && (
+              <ToggleGroup
+                type="single"
+                value={activeEmailMode}
+                onValueChange={(value) => {
+                  if (
+                    value === "login" ||
+                    (registrationEnabled && value === "register")
+                  ) {
+                    setEmailMode(value)
+                  }
+                }}
+                className="w-full"
+              >
+                <ToggleGroupItem value="login" className="flex-1">
+                  登录
                 </ToggleGroupItem>
-              )}
-            </ToggleGroup>
-          )}
-
-          {!installStatusLoaded ? (
-            <Alert>
-              <IconLoader2 />
-              <AlertTitle>正在加载登录入口</AlertTitle>
-            </Alert>
-          ) : showEmailForm ? (
-            <form onSubmit={handleEmailSubmit}>
-              <FieldGroup>
-                {twoFactorEmail ? (
-                  <>
-                    <Alert>
-                      <IconShieldCheck />
-                      <AlertTitle>验证码已发送至 {twoFactorEmail}</AlertTitle>
-                    </Alert>
-                    <Field>
-                      <FieldLabel htmlFor="code">验证码</FieldLabel>
-                      <Input
-                        id="code"
-                        name="code"
-                        inputMode="numeric"
-                        autoComplete="one-time-code"
-                        maxLength={6}
-                        required
-                      />
-                    </Field>
-                  </>
-                ) : activeEmailMode === "register" && (
-                  <Field>
-                    <FieldLabel htmlFor="name">姓名</FieldLabel>
-                    <Input id="name" name="name" autoComplete="name" required />
-                  </Field>
+                {registrationEnabled && (
+                  <ToggleGroupItem value="register" className="flex-1">
+                    注册
+                  </ToggleGroupItem>
                 )}
-                {!twoFactorEmail && (
-                  <>
-                    <Field>
-                      <FieldLabel htmlFor="email">邮箱</FieldLabel>
-                      <Input
-                        id="email"
-                        name="email"
-                        type="email"
-                        autoComplete="email"
-                        required
-                      />
-                    </Field>
-                    <Field>
-                      <FieldLabel htmlFor="password">密码</FieldLabel>
-                      <Input
-                        id="password"
-                        name="password"
-                        type="password"
-                        autoComplete={
-                          activeEmailMode === "login"
-                            ? "current-password"
-                            : "new-password"
-                        }
-                        required
-                      />
-                    </Field>
-                    {activeEmailMode === "register" && (
+              </ToggleGroup>
+            )}
+
+            {!installStatusLoaded ? (
+              <Alert>
+                <IconLoader2 />
+                <AlertTitle>正在加载登录入口</AlertTitle>
+              </Alert>
+            ) : showEmailForm ? (
+              <form onSubmit={handleEmailSubmit}>
+                <FieldGroup>
+                  {twoFactorEmail ? (
+                    <>
+                      <Alert>
+                        <IconShieldCheck />
+                        <AlertTitle>验证码已发送至 {twoFactorEmail}</AlertTitle>
+                      </Alert>
                       <Field>
-                        <FieldLabel htmlFor="password_confirmation">
-                          确认密码
-                        </FieldLabel>
+                        <FieldLabel htmlFor="code">验证码</FieldLabel>
                         <Input
-                          id="password_confirmation"
-                          name="password_confirmation"
-                          type="password"
-                          autoComplete="new-password"
+                          id="code"
+                          name="code"
+                          inputMode="numeric"
+                          autoComplete="one-time-code"
+                          maxLength={6}
                           required
                         />
                       </Field>
-                    )}
-                  </>
-                )}
-                <Button type="submit" className="w-full" disabled={emailPending}>
-                  {emailPending ? (
-                    <IconLoader2 data-icon="inline-start" />
-                  ) : twoFactorEmail ? (
-                    <IconShieldCheck data-icon="inline-start" />
-                  ) : !emailAuthEnabled ? (
-                    <IconShieldCheck data-icon="inline-start" />
-                  ) : activeEmailMode === "login" ? (
-                    <IconLogin2 data-icon="inline-start" />
-                  ) : (
-                    <IconUserPlus data-icon="inline-start" />
+                    </>
+                  ) : activeEmailMode === "register" && (
+                    <Field>
+                      <FieldLabel htmlFor="name">姓名</FieldLabel>
+                      <Input id="name" name="name" autoComplete="name" required />
+                    </Field>
                   )}
-                  {twoFactorEmail
-                    ? "验证"
-                    : !emailAuthEnabled
-                      ? "管理员登录"
-                    : activeEmailMode === "login"
-                      ? "登录"
-                      : "注册"}
-                </Button>
-                {twoFactorEmail && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="w-full"
-                    onClick={() => setTwoFactorEmail("")}
-                    disabled={emailPending}
-                  >
-                    返回登录
+                  {!twoFactorEmail && (
+                    <>
+                      <Field>
+                        <FieldLabel htmlFor="email">邮箱</FieldLabel>
+                        <Input
+                          id="email"
+                          name="email"
+                          type="email"
+                          autoComplete="email"
+                          required
+                        />
+                      </Field>
+                      <Field>
+                        <FieldLabel htmlFor="password">密码</FieldLabel>
+                        <Input
+                          id="password"
+                          name="password"
+                          type="password"
+                          autoComplete={
+                            activeEmailMode === "login"
+                              ? "current-password"
+                              : "new-password"
+                          }
+                          required
+                        />
+                      </Field>
+                      {activeEmailMode === "register" && (
+                        <Field>
+                          <FieldLabel htmlFor="password_confirmation">
+                            确认密码
+                          </FieldLabel>
+                          <Input
+                            id="password_confirmation"
+                            name="password_confirmation"
+                            type="password"
+                            autoComplete="new-password"
+                            required
+                          />
+                        </Field>
+                      )}
+                    </>
+                  )}
+                  <Button type="submit" className="w-full" disabled={emailPending}>
+                    {emailPending ? (
+                      <IconLoader2 data-icon="inline-start" />
+                    ) : twoFactorEmail ? (
+                      <IconShieldCheck data-icon="inline-start" />
+                    ) : !emailAuthEnabled ? (
+                      <IconShieldCheck data-icon="inline-start" />
+                    ) : activeEmailMode === "login" ? (
+                      <IconLogin2 data-icon="inline-start" />
+                    ) : (
+                      <IconUserPlus data-icon="inline-start" />
+                    )}
+                    {twoFactorEmail
+                      ? "验证"
+                      : !emailAuthEnabled
+                        ? "管理员登录"
+                      : activeEmailMode === "login"
+                        ? "登录"
+                        : "注册"}
                   </Button>
-                )}
-              </FieldGroup>
-            </form>
-          ) : (
-            <>
-              <Alert>
-                <IconMailCheck />
-                <AlertTitle>
-                  邮箱登录已停用，普通用户请使用已开启的登录方式
-                </AlertTitle>
-              </Alert>
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full"
-                onClick={() => setAdminEmailLoginVisible(true)}
-              >
-                <IconShieldCheck data-icon="inline-start" />
-                管理员登录
-              </Button>
-            </>
-          )}
+                  {twoFactorEmail && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full"
+                      onClick={() => setTwoFactorEmail("")}
+                      disabled={emailPending}
+                    >
+                      返回登录
+                    </Button>
+                  )}
+                </FieldGroup>
+              </form>
+            ) : (
+              <>
+                <Alert>
+                  <IconMailCheck />
+                  <AlertTitle>
+                    邮箱登录已停用，普通用户请使用已开启的登录方式
+                  </AlertTitle>
+                </Alert>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => setAdminEmailLoginVisible(true)}
+                >
+                  <IconShieldCheck data-icon="inline-start" />
+                  管理员登录
+                </Button>
+              </>
+            )}
 
-          {linuxDoConfigured && !twoFactorEmail && (
-            <>
-              <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                <Separator className="flex-1" />
-                <span>或继续使用</span>
-                <Separator className="flex-1" />
-              </div>
-              <Button
-                variant="outline"
-                className="h-11 w-full rounded-2xl font-semibold"
-                onClick={handleLogin}
-                disabled={linuxDoPending}
-              >
-                {linuxDoPending ? (
-                  <IconLoader2 data-icon="inline-start" />
-                ) : (
-                  <LinuxDoMark />
-                )}
-                使用 LinuxDO 继续
-              </Button>
-            </>
-          )}
-        </CardContent>
-      </Card>
+            {linuxDoConfigured && !twoFactorEmail && (
+              <>
+                <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                  <Separator className="flex-1" />
+                  <span>或继续使用</span>
+                  <Separator className="flex-1" />
+                </div>
+                <Button
+                  variant="outline"
+                  className="h-11 w-full rounded-2xl font-semibold"
+                  onClick={handleLogin}
+                  disabled={linuxDoPending}
+                >
+                  {linuxDoPending ? (
+                    <IconLoader2 data-icon="inline-start" />
+                  ) : (
+                    <LinuxDoMark />
+                  )}
+                  使用 LinuxDO 继续
+                </Button>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </main>
   )
 }

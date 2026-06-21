@@ -24,6 +24,7 @@ import { TablePagination } from "@/components/table-pagination"
 import { TaskDetailDialog } from "@/components/task-detail-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   Card,
   CardContent,
@@ -49,6 +50,7 @@ import {
 } from "@/components/ui/empty"
 import {
   Field,
+  FieldContent,
   FieldDescription,
   FieldGroup,
   FieldLabel,
@@ -830,6 +832,24 @@ function VoiceCloneFields({ acceptedFiles }: { acceptedFiles: string }) {
           required
         />
       </Field>
+      <Field
+        orientation="horizontal"
+        className="rounded-lg border bg-muted/30 p-3"
+      >
+        <Checkbox
+          id="clone-sample-authorization"
+          name="sample_authorization_confirmed"
+          value="1"
+        />
+        <FieldContent>
+          <FieldLabel htmlFor="clone-sample-authorization">
+            我确认拥有该声音样本的使用授权
+          </FieldLabel>
+          <FieldDescription>
+            请仅上传本人声音或已取得明确授权的样本，生成内容需自行承担合规责任。
+          </FieldDescription>
+        </FieldContent>
+      </Field>
       <FieldGroup className="grid gap-5 md:grid-cols-2">
         <SpeechRateField id="clone-speech-rate" />
         <Field>
@@ -1069,6 +1089,10 @@ function validateAudioForm(module: AudioModule, form: FormData) {
 
   if (title.length > taskTitleMaxLength) {
     return `任务名称最多 ${taskTitleMaxLength} 个字`
+  }
+
+  if (module === "voice-clone" && form.get("sample_authorization_confirmed") !== "1") {
+    return "请确认拥有该声音样本的使用授权"
   }
 
   if (module !== "speech-recognition") {

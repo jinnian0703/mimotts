@@ -13,6 +13,7 @@ import {
 import { BrandMark } from "@/components/brand-mark"
 import { useCurrentUser } from "@/components/auth-gate"
 import { Button } from "@/components/ui/button"
+import { useSiteBrand } from "@/lib/use-site-brand"
 
 const modules = ["语音转文字", "文字转语音", "音色设计", "声音克隆"]
 
@@ -41,16 +42,18 @@ const capabilities = [
 
 export default function HomePage() {
   const user = useCurrentUser()
+  const brand = useSiteBrand()
   const entryHref = "/dashboard"
+  const footerItems = [brand.footerText, brand.icpRecord].filter(Boolean)
 
   return (
-    <main className="min-h-dvh bg-background text-foreground">
+    <main className="flex min-h-dvh flex-col bg-background text-foreground">
       <header className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-5 py-6">
         <Link href="/" className="flex items-center gap-3">
           <span className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
             <BrandMark className="size-6" />
           </span>
-          <span className="font-heading text-xl font-semibold">MimoTTS</span>
+          <span className="font-heading text-xl font-semibold">{brand.name}</span>
         </Link>
         <Button asChild variant="outline">
           <Link href={entryHref}>
@@ -60,7 +63,7 @@ export default function HomePage() {
         </Button>
       </header>
 
-      <section className="mx-auto grid min-h-[calc(100dvh-96px)] w-full max-w-6xl items-center gap-12 px-5 pb-14 pt-8 lg:grid-cols-[minmax(0,1fr)_390px]">
+      <section className="mx-auto grid w-full max-w-6xl flex-1 items-center gap-12 px-5 pb-14 pt-8 lg:grid-cols-[minmax(0,1fr)_390px]">
         <div className="max-w-3xl">
           <div className="space-y-6">
             <p className="text-sm font-medium text-primary">小米 MimoTTS 接入工具</p>
@@ -68,7 +71,7 @@ export default function HomePage() {
               音频任务管理系统
             </h1>
             <p className="max-w-2xl text-base leading-8 text-muted-foreground">
-              集中管理语音识别、语音合成、音色设计、声音克隆、账户接入与套餐计费。
+              {brand.subtitle}
             </p>
           </div>
 
@@ -97,7 +100,7 @@ export default function HomePage() {
           <div className="flex items-center justify-between border-b border-border pb-4">
             <div>
               <div className="text-sm text-muted-foreground">系统入口</div>
-              <div className="mt-1 text-2xl font-semibold">MimoTTS</div>
+              <div className="mt-1 text-2xl font-semibold">{brand.name}</div>
             </div>
             <div className="flex size-10 items-center justify-center rounded-lg bg-secondary text-primary">
               <IconGauge className="size-5" />
@@ -134,6 +137,30 @@ export default function HomePage() {
           </div>
         </aside>
       </section>
+
+      {(footerItems.length > 0 || brand.supportEmail) && (
+        <footer className="mx-auto flex w-full max-w-6xl flex-wrap items-center gap-x-5 gap-y-2 px-5 pb-6 text-xs text-muted-foreground">
+          {brand.footerText && <span>{brand.footerText}</span>}
+          {brand.icpRecord && (
+            <a
+              href="https://beian.miit.gov.cn/"
+              target="_blank"
+              rel="noreferrer"
+              className="hover:text-foreground"
+            >
+              {brand.icpRecord}
+            </a>
+          )}
+          {brand.supportEmail && (
+            <a
+              href={`mailto:${brand.supportEmail}`}
+              className="hover:text-foreground"
+            >
+              {brand.supportEmail}
+            </a>
+          )}
+        </footer>
+      )}
     </main>
   )
 }

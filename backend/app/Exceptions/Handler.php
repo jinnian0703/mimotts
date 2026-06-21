@@ -30,7 +30,7 @@ class Handler extends ExceptionHandler
                 return response()->json([
                     'error' => [
                         'code' => 'ValidationException',
-                        'message' => '请求参数不符合要求',
+                        'message' => $this->firstValidationMessage($e),
                         'fields' => $e->errors(),
                     ],
                 ], 422);
@@ -63,5 +63,16 @@ class Handler extends ExceptionHandler
         }
 
         return parent::render($request, $e);
+    }
+
+    private function firstValidationMessage(ValidationException $e): string
+    {
+        foreach ($e->errors() as $messages) {
+            if (is_array($messages) && isset($messages[0]) && $messages[0] !== '') {
+                return (string) $messages[0];
+            }
+        }
+
+        return '请求参数不符合要求';
     }
 }

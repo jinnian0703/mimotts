@@ -118,7 +118,10 @@ class MimoController
             'label' => ['nullable', 'string', 'max:200'],
             'response_format' => ['nullable', 'in:mp3,wav,ogg,flac,pcm16'],
             'speech_rate' => ['nullable', 'in:off,x-slow,slow,normal,fast,x-fast'],
-        ], $this->titleValidationMessages());
+            'sample_authorization_confirmed' => ['accepted'],
+        ], array_merge($this->titleValidationMessages(), [
+            'sample_authorization_confirmed.accepted' => '请确认拥有该声音样本的使用授权。',
+        ]));
 
         $job = $this->createJob($request, 'voice_clone', 'mimo-v2.5-tts-voiceclone');
         $file = $storage->storeUpload($job, $data['audio'], 'source');
@@ -130,7 +133,7 @@ class MimoController
             Arr::only($data, ['response_format', 'speech_rate'])
         );
 
-        return $this->queue($request, $job, $payload, Arr::only($data, ['title', 'priority', 'text', 'label', 'response_format', 'speech_rate']), $file, 'mimo.voice_clone', [
+        return $this->queue($request, $job, $payload, Arr::only($data, ['title', 'priority', 'text', 'label', 'response_format', 'speech_rate', 'sample_authorization_confirmed']), $file, 'mimo.voice_clone', [
             'source_file_id' => $file->id,
         ]);
     }

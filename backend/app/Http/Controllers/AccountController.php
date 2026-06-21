@@ -109,6 +109,8 @@ class AccountController
                 Rule::unique('users', 'email')->ignore($user->id),
             ],
             'current_password' => ['nullable', 'string', 'max:128'],
+        ], [
+            'email.unique' => '该邮箱已被注册，无法绑定到当前账号',
         ]);
 
         $this->requireCurrentPassword($user, $data['current_password'] ?? null);
