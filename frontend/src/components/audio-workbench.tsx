@@ -763,6 +763,11 @@ function SynthesisFields() {
   const [stylePreset, setStylePreset] = useState("custom")
   const [stylePrompt, setStylePrompt] = useState("")
   const textRef = useRef<HTMLTextAreaElement | null>(null)
+  const singingPreset = stylePresets.find((item) => item.value === "singing")
+  const visibleStylePresets =
+    deliveryMode === "singing"
+      ? stylePresets.filter((item) => item.value === "singing")
+      : stylePresets.filter((item) => item.value !== "singing")
 
   useEffect(() => {
     const form = textRef.current?.form
@@ -794,7 +799,21 @@ function SynthesisFields() {
     const preset = stylePresets.find((item) => item.value === value)
     if (preset) {
       setStylePrompt(preset.prompt)
-      setDeliveryMode(preset.deliveryMode ?? "speech")
+    }
+  }
+
+  function handleDeliveryModeChange(value: string) {
+    setDeliveryMode(value)
+
+    if (value === "singing") {
+      setStylePreset("singing")
+      setStylePrompt(singingPreset?.prompt ?? "")
+      return
+    }
+
+    if (stylePreset === "singing") {
+      setStylePreset("custom")
+      setStylePrompt("")
     }
   }
 
@@ -848,7 +867,7 @@ function SynthesisFields() {
           <Select
             name="delivery_mode"
             value={deliveryMode}
-            onValueChange={setDeliveryMode}
+            onValueChange={handleDeliveryModeChange}
           >
             <SelectTrigger id="synthesis-delivery-mode" className="w-full">
               <SelectValue placeholder="选择模式" />
@@ -874,8 +893,10 @@ function SynthesisFields() {
             </SelectTrigger>
             <SelectContent position="popper">
               <SelectGroup>
-                <SelectItem value="custom">自定义</SelectItem>
-                {stylePresets.map((preset) => (
+                {deliveryMode !== "singing" && (
+                  <SelectItem value="custom">自定义</SelectItem>
+                )}
+                {visibleStylePresets.map((preset) => (
                   <SelectItem key={preset.value} value={preset.value}>
                     {preset.label}
                   </SelectItem>
