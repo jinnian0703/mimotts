@@ -20,6 +20,8 @@ export type User = {
   avatarUrl?: string
   avatar_url?: string
   is_admin?: boolean
+  isSuperAdmin?: boolean
+  is_super_admin?: boolean
   linuxdoId?: string | null
   linuxdo_id?: string | null
   lastLoginAt?: string | null

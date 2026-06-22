@@ -67,6 +67,7 @@ type UserDraft = {
   role: "admin" | "user"
   status: UserStatus
   plan_id: string
+  isSuperAdmin: boolean
 }
 
 type QuotaAdjustmentDraft = {
@@ -135,7 +136,15 @@ export default function UsersPage() {
   }
 
   function canManageUser(user: User): boolean {
-    return userStatus(user) !== "deleted"
+    return userStatus(user) !== "deleted" && canManageProtectedUser(user)
+  }
+
+  function canRemoveDeletedUser(user: User): boolean {
+    return userStatus(user) === "deleted" && canManageProtectedUser(user)
+  }
+
+  function canManageProtectedUser(user: User): boolean {
+    return !user.isSuperAdmin || currentUser?.isSuperAdmin === true
   }
 
   const refreshUsers = useCallback(async (resetSelection = false) => {
@@ -264,6 +273,7 @@ export default function UsersPage() {
       role: user.role,
       status: user.status ?? "active",
       plan_id: user.planId ?? "",
+      isSuperAdmin: user.isSuperAdmin === true,
     })
   }
 
@@ -614,8 +624,12 @@ export default function UsersPage() {
                         <TableCell className="font-medium">{user.name}</TableCell>
                         <TableCell>{user.email ?? "-"}</TableCell>
                         <TableCell>
-                          <Badge variant="secondary">
-                            {user.role === "admin" ? "管理员" : "用户"}
+                          <Badge variant={user.isSuperAdmin ? "default" : "secondary"}>
+                            {user.isSuperAdmin
+                              ? "超级管理员"
+                              : user.role === "admin"
+                                ? "管理员"
+                                : "用户"}
                           </Badge>
                         </TableCell>
                         <TableCell>
@@ -644,6 +658,7 @@ export default function UsersPage() {
                               variant="ghost"
                               size="sm"
                               onClick={() => setRemoving(user)}
+                              disabled={!canRemoveDeletedUser(user)}
                             >
                               <IconTrash data-icon="inline-start" />
                               移除
@@ -730,6 +745,7 @@ export default function UsersPage() {
                   <FieldLabel htmlFor="edit-role">角色</FieldLabel>
                   <Select
                     value={editing.role}
+                    disabled={editing.isSuperAdmin}
                     onValueChange={(role) =>
                       setEditing((current) =>
                         current
@@ -753,6 +769,7 @@ export default function UsersPage() {
                   <FieldLabel htmlFor="edit-status">状态</FieldLabel>
                   <Select
                     value={editing.status}
+                    disabled={editing.isSuperAdmin}
                     onValueChange={(status) =>
                       setEditing((current) =>
                         current

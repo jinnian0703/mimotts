@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 
@@ -49,6 +50,7 @@ class User extends Authenticatable
 
     protected $appends = [
         'has_password',
+        'is_super_admin',
     ];
 
     protected $casts = [
@@ -80,6 +82,41 @@ class User extends Authenticatable
     public function getHasPasswordAttribute(): bool
     {
         return ! empty($this->attributes['password'] ?? null);
+    }
+
+    public function getIsSuperAdminAttribute(): bool
+    {
+        return $this->isSuperAdmin();
+    }
+
+    public function isSuperAdmin(): bool
+    {
+        $superAdminId = self::superAdminId();
+
+        return $superAdminId !== null && (string) $this->id === (string) $superAdminId;
+    }
+
+    public static function superAdminId(): ?int
+    {
+        if (Schema::hasTable('system_settings')) {
+            $installation = SystemSetting::query()
+                ->where('key', 'installation')
+                ->first();
+            $adminUserId = $installation ? ($installation->decodedValue()['admin_user_id'] ?? null) : null;
+
+            if ($adminUserId) {
+                return (int) $adminUserId;
+            }
+        }
+
+        if (! Schema::hasTable('users')) {
+            return null;
+        }
+
+        return self::query()
+            ->where('is_admin', true)
+            ->orderBy('id')
+            ->value('id');
     }
 
     public function isDeleted(): bool

@@ -13,7 +13,7 @@ Run from the repository root:
 Optional strict model-name validation:
 
 ```powershell
-$env:MIMO_EXPECTED_MODELS = "model-a,model-b"
+$env:MIMO_EXPECTED_MODELS = "mimo-v2.5-asr,mimo-v2.5-tts,mimo-v2.5-tts-voiceclone,mimo-v2.5-tts-voicedesign"
 .\scripts\verify.ps1 -FailOnWarnings
 ```
 

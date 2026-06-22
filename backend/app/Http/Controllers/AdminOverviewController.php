@@ -77,6 +77,10 @@ class AdminOverviewController
         AccountDeletionService $deletion
     ): JsonResponse
     {
+        if (! $this->canManageUser($request->user(), $user)) {
+            return $this->superAdminProtectedResponse();
+        }
+
         $planIds = $this->planIds($billing);
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
@@ -162,6 +166,10 @@ class AdminOverviewController
 
     public function adjustQuota(Request $request, User $user, QuotaService $quota, AuditLogger $audit): JsonResponse
     {
+        if (! $this->canManageUser($request->user(), $user)) {
+            return $this->superAdminProtectedResponse();
+        }
+
         if ($user->isDeleted()) {
             return response()->json([
                 'error' => [
@@ -232,6 +240,10 @@ class AdminOverviewController
         AccountDeletionService $deletion,
         AuditLogger $audit
     ): JsonResponse {
+        if (! $this->canManageUser($request->user(), $user)) {
+            return $this->superAdminProtectedResponse();
+        }
+
         if (! $user->isDeleted()) {
             return response()->json([
                 'error' => [
@@ -274,7 +286,12 @@ class AdminOverviewController
             ], 422);
         }
 
-        $query = User::query()->whereIn('id', $data['ids']);
+        $targets = User::query()->whereIn('id', $data['ids'])->get();
+        if ($targets->contains(fn (User $target) => ! $this->canManageUser($request->user(), $target))) {
+            return $this->superAdminProtectedResponse();
+        }
+
+        $query = User::query()->whereIn('id', $targets->pluck('id')->all());
         if ($data['action'] === 'activate') {
             $query->notDeleted();
             $query->update(['status' => User::STATUS_ACTIVE]);
@@ -775,6 +792,8 @@ class AdminOverviewController
             'name' => $user->name,
             'email' => $user->email,
             'role' => $user->is_admin ? 'admin' : 'user',
+            'isSuperAdmin' => $user->isSuperAdmin(),
+            'is_super_admin' => $user->isSuperAdmin(),
             'status' => $user->status ?: 'active',
             'planId' => $user->plan_id,
             'quotaBalance' => (int) $user->quota_balance,
@@ -792,6 +811,21 @@ class AdminOverviewController
             fn (array $plan) => (string) ($plan['id'] ?? ''),
             $billing->config()['plans'] ?? []
         )));
+    }
+
+    private function canManageUser(User $actor, User $target): bool
+    {
+        return $actor->isSuperAdmin() || ! $target->isSuperAdmin();
+    }
+
+    private function superAdminProtectedResponse(): JsonResponse
+    {
+        return response()->json([
+            'error' => [
+                'code' => 'SuperAdminProtected',
+                'message' => '只有超级管理员可以修改默认管理员账号',
+            ],
+        ], 403);
     }
 
     private function planById(BillingConfigService $billing, ?string $planId): ?array

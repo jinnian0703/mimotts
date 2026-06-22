@@ -217,12 +217,13 @@ async function request<T>(
   return (await response.json()) as T
 }
 
-function mapUser(input: Partial<User> & { is_admin?: boolean }): User {
+function mapUser(input: Partial<User> & { is_admin?: boolean; is_super_admin?: boolean }): User {
   return {
     id: String(input.id ?? ""),
     name: input.name ?? "",
     email: input.email,
     role: input.role ?? (input.is_admin ? "admin" : "user"),
+    isSuperAdmin: input.isSuperAdmin ?? input.is_super_admin ?? false,
     status: input.status ?? "active",
     planId: input.planId ?? input.plan_id,
     quotaBalance: input.quotaBalance ?? input.quota_balance ?? 0,

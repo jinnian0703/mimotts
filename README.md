@@ -129,6 +129,15 @@ npm run build
 
 ## API
 
+当前内置的小米 Mimo 模型：
+
+| 能力 | 模型 |
+| --- | --- |
+| 语音识别 | `mimo-v2.5-asr` |
+| 语音合成 | `mimo-v2.5-tts` |
+| 声音克隆 | `mimo-v2.5-tts-voiceclone` |
+| 音色设计 | `mimo-v2.5-tts-voicedesign` |
+
 | 路径 | 用途 |
 | --- | --- |
 | `/auth/*` | 登录、注册、邮箱验证、LinuxDo 登录 |
@@ -162,6 +171,12 @@ Docker 部署下，API 路径为：
 - 用户只能访问自己的音频任务与文件。
 
 ## 验证
+
+项目总体验证：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/verify.ps1 -FailOnWarnings
+```
 
 前端：
 

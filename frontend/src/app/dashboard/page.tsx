@@ -372,8 +372,8 @@ export default function DashboardPage() {
                 value={isAdmin ? `${userStats.total} 个账户` : "接口与账户"}
               />
               <QuickLinkTile
-                href={isAdmin ? "/system-settings" : "/workbench"}
-                title={isAdmin ? "系统设置" : "继续处理"}
+                href={isAdmin ? "/system-settings" : "/tasks"}
+                title={isAdmin ? "系统设置" : "任务记录"}
                 value={
                   isAdmin
                     ? "站点与接入配置"

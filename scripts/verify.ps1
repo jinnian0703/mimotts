@@ -1,7 +1,12 @@
 [CmdletBinding()]
 param(
     [string]$Root = '',
-    [string[]]$ExpectedModels = @(),
+    [string[]]$ExpectedModels = @(
+        'mimo-v2.5-asr',
+        'mimo-v2.5-tts',
+        'mimo-v2.5-tts-voiceclone',
+        'mimo-v2.5-tts-voicedesign'
+    ),
     [switch]$FailOnWarnings
 )
 
@@ -361,7 +366,7 @@ try {
                 "Expected model '$model' was not found."
         }
     } else {
-        Add-Check WARN 'API' 'Exact expected model list' 'Exact model ids were not configured. Set MIMO_EXPECTED_MODELS=model-a,model-b for strict model-name validation.' ''
+        Add-Check WARN 'API' 'Exact expected model list' 'Exact model ids were not configured. Set MIMO_EXPECTED_MODELS=mimo-v2.5-asr,mimo-v2.5-tts,mimo-v2.5-tts-voiceclone,mimo-v2.5-tts-voicedesign for strict model-name validation.' ''
     }
 
     $statusOrder = @{ FAIL = 0; WARN = 1; PASS = 2 }
