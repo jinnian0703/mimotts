@@ -44,7 +44,7 @@ class AdminOverviewController
                     'items' => (clone $taskQuery)
                         ->with(['files', 'user'])
                         ->latest()
-                        ->limit(8)
+                        ->limit(15)
                         ->get()
                         ->map(fn (AudioJob $job) => $this->serializeJob($job))
                         ->values(),

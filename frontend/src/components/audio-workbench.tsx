@@ -177,6 +177,12 @@ const stylePresets = [
     prompt: "积极、有活力的口播语气。重点词轻微强调，节奏紧凑但保持清晰。",
   },
   {
+    value: "singing",
+    label: "唱歌",
+    prompt: "以自然、有旋律感的演唱方式表达。气息连贯，咬字清楚，情绪投入，避免播报腔。",
+    deliveryMode: "singing",
+  },
+  {
     value: "director",
     label: "导演模式",
     prompt:
@@ -788,6 +794,7 @@ function SynthesisFields() {
     const preset = stylePresets.find((item) => item.value === value)
     if (preset) {
       setStylePrompt(preset.prompt)
+      setDeliveryMode(preset.deliveryMode ?? "speech")
     }
   }
 
@@ -1157,9 +1164,6 @@ function TaskTable({
                   <TableCell>
                     <div className="flex flex-col gap-1">
                       <span className="font-medium">{task.title}</span>
-                      <span className="text-xs text-muted-foreground">
-                        {task.id}
-                      </span>
                     </div>
                   </TableCell>
                   <TableCell>{moduleLabels[task.module]}</TableCell>
@@ -1200,9 +1204,6 @@ function TaskTable({
                         <div className="rounded-lg border bg-muted/30 p-3 text-sm">
                           <div className="font-medium" title={task.title}>
                             {task.title}
-                          </div>
-                          <div className="mt-1 text-xs text-muted-foreground">
-                            {task.id}
                           </div>
                         </div>
                         <DialogFooter>

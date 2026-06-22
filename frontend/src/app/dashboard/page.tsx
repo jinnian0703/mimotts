@@ -444,7 +444,7 @@ export default function DashboardPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {tasks.slice(0, 8).map((task) => (
+                    {tasks.slice(0, 15).map((task) => (
                       <TableRow key={task.id}>
                         <TableCell className="min-w-48">
                           <div className="flex flex-col gap-1">
