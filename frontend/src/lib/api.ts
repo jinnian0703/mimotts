@@ -21,6 +21,7 @@ import type {
   PaginatedTasks,
   PaginatedUsers,
   PaginationMeta,
+  PresetConfig,
   QuotaRecord,
   QuotaSummary,
   Role,
@@ -31,6 +32,7 @@ import type {
   User,
   UserStatus,
 } from "@/lib/types"
+import { normalizePresetConfig } from "@/lib/presets"
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "/api"
 const UNSAFE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"])
@@ -729,6 +731,43 @@ export const api = {
       method: "PUT",
       body: JSON.stringify(userMimoConfigPayload(config)),
     }).then(({ config }) => config)
+  },
+  presetConfig() {
+    return request<{ config: PresetConfig }>("/preset-config").then(
+      ({ config }) => normalizePresetConfig(config)
+    )
+  },
+  presetDefaults() {
+    return request<{ config: PresetConfig }>("/preset-config/defaults").then(
+      ({ config }) => normalizePresetConfig(config)
+    )
+  },
+  userPresetConfig() {
+    return request<{ config: PresetConfig }>("/user/preset-config").then(
+      ({ config }) => normalizePresetConfig(config)
+    )
+  },
+  saveUserPresetConfig(config: PresetConfig) {
+    return request<{ config: PresetConfig }>("/user/preset-config", {
+      method: "PUT",
+      body: JSON.stringify(config),
+    }).then(({ config }) => normalizePresetConfig(config))
+  },
+  resetUserPresetConfig() {
+    return request<{ config: PresetConfig }>("/user/preset-config", {
+      method: "DELETE",
+    }).then(({ config }) => normalizePresetConfig(config))
+  },
+  adminPresetConfig() {
+    return request<{ config: PresetConfig }>("/admin/preset-config").then(
+      ({ config }) => normalizePresetConfig(config)
+    )
+  },
+  saveAdminPresetConfig(config: PresetConfig) {
+    return request<{ config: PresetConfig }>("/admin/preset-config", {
+      method: "PUT",
+      body: JSON.stringify(config),
+    }).then(({ config }) => normalizePresetConfig(config))
   },
   taskPage(params: TaskPageParams = {}) {
     return request<TaskPageResponse>(

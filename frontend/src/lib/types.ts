@@ -131,6 +131,45 @@ export type MimoConfig = {
   configured?: boolean
 }
 
+export type PresetScope = "default" | "global" | "user" | "inherited"
+
+export type TextTagPreset = {
+  label: string
+  value: string
+  category?: string | null
+}
+
+export type StylePreset = {
+  value: string
+  label: string
+  prompt: string
+  delivery_mode?: "speech" | "singing"
+  deliveryMode?: "speech" | "singing"
+}
+
+export type VoiceDesignPreset = {
+  value: string
+  label: string
+  description: string
+  text: string
+  speech_rate?: string
+  speechRate?: string
+  optimize_text_preview?: boolean
+  optimizeTextPreview?: boolean
+}
+
+export type PresetConfig = {
+  text_tags: TextTagPreset[]
+  textTags?: TextTagPreset[]
+  style_presets: StylePreset[]
+  stylePresets?: StylePreset[]
+  voice_design_presets: VoiceDesignPreset[]
+  voiceDesignPresets?: VoiceDesignPreset[]
+  source?: PresetScope
+  has_personal?: boolean
+  hasPersonal?: boolean
+}
+
 export type BasicInfoConfig = {
   system_name?: string | null
   site_title?: string | null

@@ -13,6 +13,7 @@ import {
   IconClipboardList,
   IconCreditCard,
   IconDashboard,
+  IconListDetails,
   IconLogout,
   IconMenu2,
   IconMicrophone,
@@ -44,6 +45,7 @@ import { cn } from "@/lib/utils"
 const navItems = [
   { href: "/dashboard", label: "仪表盘", icon: IconDashboard },
   { href: "/workbench", label: "工作台", icon: IconMicrophone },
+  { href: "/presets", label: "预设设置", icon: IconListDetails },
   { href: "/billing", label: "套餐计费", icon: IconCreditCard },
   { href: "/settings", label: "设置", icon: IconAdjustments },
 ]

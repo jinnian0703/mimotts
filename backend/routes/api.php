@@ -9,6 +9,7 @@ use App\Http\Controllers\BillingController;
 use App\Http\Controllers\HealthController;
 use App\Http\Controllers\InstallController;
 use App\Http\Controllers\MimoController;
+use App\Http\Controllers\PresetConfigController;
 use App\Http\Controllers\QuotaController;
 use App\Http\Controllers\UpdateController;
 use App\Http\Controllers\UserConfigController;
@@ -52,6 +53,11 @@ Route::middleware('auth.api')->group(function (): void {
     Route::get('/user/api-config', [UserConfigController::class, 'show']);
     Route::put('/user/api-config', [UserConfigController::class, 'update']);
     Route::delete('/user/api-config', [UserConfigController::class, 'destroy']);
+    Route::get('/preset-config', [PresetConfigController::class, 'show']);
+    Route::get('/preset-config/defaults', [PresetConfigController::class, 'defaults']);
+    Route::get('/user/preset-config', [PresetConfigController::class, 'showUser']);
+    Route::put('/user/preset-config', [PresetConfigController::class, 'updateUser']);
+    Route::delete('/user/preset-config', [PresetConfigController::class, 'resetUser']);
 
     Route::get('/dashboard', [AdminOverviewController::class, 'dashboard']);
     Route::post('/mimo/asr', [MimoController::class, 'asr']);
@@ -82,6 +88,8 @@ Route::middleware(['auth.api', 'admin'])->group(function (): void {
     Route::post('/admin/basic-icon', [AdminOverviewController::class, 'uploadBasicIcon']);
     Route::get('/admin/audio-retention', [AdminOverviewController::class, 'audioRetention']);
     Route::put('/admin/audio-retention', [AdminOverviewController::class, 'updateAudioRetention']);
+    Route::get('/admin/preset-config', [PresetConfigController::class, 'showAdmin']);
+    Route::put('/admin/preset-config', [PresetConfigController::class, 'updateAdmin']);
     Route::get('/admin/users', [AdminOverviewController::class, 'users']);
     Route::put('/admin/users/{user}', [AdminOverviewController::class, 'updateUser']);
     Route::delete('/admin/users/{user}', [AdminOverviewController::class, 'removeDeletedUser']);

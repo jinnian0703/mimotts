@@ -21,7 +21,14 @@ import type {
   AudioTask,
   MimoConfig,
   PaginationMeta,
+  PresetConfig,
 } from "@/lib/types"
+import {
+  defaultPresetConfig,
+  stylePresetDeliveryMode,
+  voiceDesignOptimizeTextPreview,
+  voiceDesignSpeechRate,
+} from "@/lib/presets"
 import { StatusBadge } from "@/components/status-badge"
 import { TablePagination } from "@/components/table-pagination"
 import { TaskDetailDialog } from "@/components/task-detail-dialog"
@@ -150,94 +157,6 @@ const deliveryModeOptions = [
   { value: "singing", label: "唱歌" },
 ]
 
-const stylePresets = [
-  {
-    value: "standard",
-    label: "标准播报",
-    prompt: "专业、清晰、稳定的播报语气。语句边界明确，停顿自然。",
-  },
-  {
-    value: "service",
-    label: "客服接待",
-    prompt: "亲和、克制、耐心的服务语气。重点信息读得清楚，尾音自然收束。",
-  },
-  {
-    value: "training",
-    label: "培训讲解",
-    prompt: "讲解式表达，节奏稳健，关键术语略作强调，段落之间保留短暂停顿。",
-  },
-  {
-    value: "news",
-    label: "新闻播报",
-    prompt: "正式、客观、清晰的新闻播报语气。语速均衡，不夸张。",
-  },
-  {
-    value: "commercial",
-    label: "活动口播",
-    prompt: "积极、有活力的口播语气。重点词轻微强调，节奏紧凑但保持清晰。",
-  },
-  {
-    value: "singing",
-    label: "自然演唱",
-    prompt: "以自然、有旋律感的演唱方式表达。气息连贯，咬字清楚，情绪投入，避免播报腔。",
-    deliveryMode: "singing",
-  },
-  {
-    value: "singing-pop",
-    label: "流行抒情",
-    prompt: "以流行抒情歌曲的方式演唱。旋律柔和，情绪真诚，尾音自然延展，副歌部分更饱满。",
-    deliveryMode: "singing",
-  },
-  {
-    value: "singing-bright",
-    label: "轻快活力",
-    prompt: "以轻快、有活力的演唱方式表达。节奏明朗，咬字清晰，情绪积极，适合明亮欢快的旋律。",
-    deliveryMode: "singing",
-  },
-  {
-    value: "singing-ballad",
-    label: "温柔民谣",
-    prompt: "以温柔民谣的方式演唱。声音贴近、气息柔和，节奏舒展，保留细腻的情绪起伏。",
-    deliveryMode: "singing",
-  },
-  {
-    value: "singing-dramatic",
-    label: "情绪高亢",
-    prompt: "以情绪更强的演唱方式表达。层次递进，高潮处更有力量，保持清晰咬字和稳定气息。",
-    deliveryMode: "singing",
-  },
-  {
-    value: "director",
-    label: "导演模式",
-    prompt:
-      "角色：专业企业旁白，声线稳定，吐字清晰。\n场景：面向正式产品介绍、培训材料或系统通知。\n指导：中等语速，句尾自然收束，重点词略作强调，段落间保留短暂停顿。",
-  },
-]
-
-const textTagPresets = [
-  { label: "短停顿", value: "（停顿片刻）" },
-  { label: "长停顿", value: "（长停顿）" },
-  { label: "深吸气", value: "（深吸一口气）" },
-  { label: "叹气", value: "（叹气）" },
-  { label: "轻笑", value: "（轻笑）" },
-  { label: "咳嗽", value: "（咳嗽）" },
-  { label: "开心", value: "（开心）" },
-  { label: "悲伤", value: "（悲伤）" },
-  { label: "生气", value: "（生气）" },
-  { label: "温柔", value: "（温柔）" },
-  { label: "兴奋", value: "（兴奋）" },
-  { label: "平静", value: "（平静）" },
-  { label: "小声", value: "（小声）" },
-  { label: "加快", value: "（语速变快）" },
-  { label: "放慢", value: "（语速变慢）" },
-  { label: "重读", value: "（重读）" },
-  { label: "东北话", value: "（东北话）" },
-  { label: "四川话", value: "（四川话）" },
-  { label: "河南话", value: "（河南话）" },
-  { label: "粤语", value: "（粤语）" },
-  { label: "台湾腔", value: "（台湾腔）" },
-]
-
 const recognitionAudioMaxBytes = 7 * 1024 * 1024
 const recognitionAudioMaxLabel = "7 MB"
 const recognitionBase64MaxLabel = "10 MB"
@@ -271,6 +190,8 @@ export function AudioWorkbench() {
     useState<AudioModule>("speech-recognition")
   const [loading, setLoading] = useState(true)
   const [retention, setRetention] = useState<AudioRetentionConfig | null>(null)
+  const [presetConfig, setPresetConfig] =
+    useState<PresetConfig>(defaultPresetConfig)
   const [taskPagination, setTaskPagination] =
     useState<PaginationMeta>(defaultTaskPagination)
   const [page, setPage] = useState(1)
@@ -332,6 +253,23 @@ export function AudioWorkbench() {
       active = false
     }
   }, [page, pageSize])
+
+  useEffect(() => {
+    let active = true
+
+    api
+      .presetConfig()
+      .then((config) => {
+        if (active) {
+          setPresetConfig(config)
+        }
+      })
+      .catch(() => undefined)
+
+    return () => {
+      active = false
+    }
+  }, [])
 
   useEffect(() => {
     const hasActiveTasks = tasks.some((task) =>
@@ -408,7 +346,11 @@ export function AudioWorkbench() {
                   value={module.value}
                   className="m-0"
                 >
-                  <AudioModuleForm config={module} onSubmitted={appendTask} />
+                  <AudioModuleForm
+                    config={module}
+                    presetConfig={presetConfig}
+                    onSubmitted={appendTask}
+                  />
                 </TabsContent>
               ))}
             </Tabs>
@@ -644,9 +586,11 @@ function PersonalApiSettings() {
 
 function AudioModuleForm({
   config,
+  presetConfig,
   onSubmitted,
 }: {
   config: ModuleConfig
+  presetConfig: PresetConfig
   onSubmitted: (task: AudioTask) => void
 }) {
   const [pending, setPending] = useState(false)
@@ -721,8 +665,12 @@ function AudioModuleForm({
         {config.value === "speech-recognition" && (
           <RecognitionFields acceptedFiles={config.acceptedFiles} />
         )}
-        {config.value === "speech-synthesis" && <SynthesisFields />}
-        {config.value === "voice-design" && <VoiceDesignFields />}
+        {config.value === "speech-synthesis" && (
+          <SynthesisFields presetConfig={presetConfig} />
+        )}
+        {config.value === "voice-design" && (
+          <VoiceDesignFields presetConfig={presetConfig} />
+        )}
         {config.value === "voice-clone" && (
           <VoiceCloneFields acceptedFiles={config.acceptedFiles} />
         )}
@@ -792,20 +740,22 @@ function RecognitionFields({ acceptedFiles }: { acceptedFiles: string }) {
   )
 }
 
-function SynthesisFields() {
+function SynthesisFields({ presetConfig }: { presetConfig: PresetConfig }) {
   const [text, setText] = useState("")
   const [deliveryMode, setDeliveryMode] = useState("speech")
   const [stylePreset, setStylePreset] = useState("custom")
   const [stylePrompt, setStylePrompt] = useState("")
   const textRef = useRef<HTMLTextAreaElement | null>(null)
+  const stylePresets = presetConfig.style_presets
+  const textTagPresets = presetConfig.text_tags
   const singingPresets = stylePresets.filter(
-    (item) => item.deliveryMode === "singing"
+    (item) => stylePresetDeliveryMode(item) === "singing"
   )
   const defaultSingingPreset = singingPresets[0]
   const visibleStylePresets =
     deliveryMode === "singing"
       ? singingPresets
-      : stylePresets.filter((item) => item.deliveryMode !== "singing")
+      : stylePresets.filter((item) => stylePresetDeliveryMode(item) !== "singing")
 
   useEffect(() => {
     const form = textRef.current?.form
@@ -850,7 +800,7 @@ function SynthesisFields() {
     }
 
     const currentPreset = stylePresets.find((item) => item.value === stylePreset)
-    if (currentPreset?.deliveryMode === "singing") {
+    if (currentPreset && stylePresetDeliveryMode(currentPreset) === "singing") {
       setStylePreset("custom")
       setStylePrompt("")
     }
@@ -886,13 +836,13 @@ function SynthesisFields() {
           required
         />
         <div className="flex flex-wrap gap-2">
-          {textTagPresets.map((tag) => (
+          {textTagPresets.map((tag, index) => (
             <Button
-              key={tag.label}
+              key={`${tag.label}-${index}`}
               type="button"
               variant="outline"
               size="sm"
-              title={tag.value}
+              title={tag.category ? `${tag.category}：${tag.value}` : tag.value}
               onClick={() => insertTextTag(tag.value)}
             >
               {tag.label}
@@ -994,9 +944,71 @@ function SynthesisFields() {
   )
 }
 
-function VoiceDesignFields() {
+function VoiceDesignFields({ presetConfig }: { presetConfig: PresetConfig }) {
+  const [designPreset, setDesignPreset] = useState("custom")
+  const [description, setDescription] = useState("")
+  const [script, setScript] = useState("")
+  const [speechRate, setSpeechRate] = useState("off")
+  const [optimizeTextPreview, setOptimizeTextPreview] = useState(false)
+  const voiceDesignPresets = presetConfig.voice_design_presets
+
+  useEffect(() => {
+    const form = document.getElementById("design-brief")?.closest("form")
+    if (!form) {
+      return
+    }
+
+    function resetControlledFields() {
+      setDesignPreset("custom")
+      setDescription("")
+      setScript("")
+      setSpeechRate("off")
+      setOptimizeTextPreview(false)
+    }
+
+    form.addEventListener("mimo-form-reset", resetControlledFields)
+
+    return () => {
+      form.removeEventListener("mimo-form-reset", resetControlledFields)
+    }
+  }, [])
+
+  function applyVoiceDesignPreset(value: string) {
+    setDesignPreset(value)
+
+    if (value === "custom") {
+      return
+    }
+
+    const preset = voiceDesignPresets.find((item) => item.value === value)
+    if (!preset) {
+      return
+    }
+
+    setDescription(preset.description)
+    setScript(preset.text)
+    setSpeechRate(voiceDesignSpeechRate(preset))
+    setOptimizeTextPreview(voiceDesignOptimizeTextPreview(preset))
+  }
+
   return (
     <>
+      <Field>
+        <FieldLabel htmlFor="design-preset">音色设计预设</FieldLabel>
+        <Select value={designPreset} onValueChange={applyVoiceDesignPreset}>
+          <SelectTrigger id="design-preset" className="w-full">
+            <SelectValue placeholder="选择预设" />
+          </SelectTrigger>
+          <SelectContent position="popper">
+            <SelectItem value="custom">自定义</SelectItem>
+            {voiceDesignPresets.map((preset) => (
+              <SelectItem key={preset.value} value={preset.value}>
+                {preset.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </Field>
       <Field>
         <FieldLabel htmlFor="design-brief">音色要求</FieldLabel>
         <Textarea
@@ -1004,6 +1016,11 @@ function VoiceDesignFields() {
           name="description"
           placeholder="描述音色方向、语气、适用场景"
           rows={5}
+          value={description}
+          onChange={(event) => {
+            setDescription(event.target.value)
+            setDesignPreset("custom")
+          }}
           required
         />
       </Field>
@@ -1013,11 +1030,23 @@ function VoiceDesignFields() {
           id="design-script"
           name="text"
           placeholder="用于生成样音的短文本"
+          value={script}
+          onChange={(event) => {
+            setScript(event.target.value)
+            setDesignPreset("custom")
+          }}
           required
         />
       </Field>
       <FieldGroup className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-        <SpeechRateField id="design-speech-rate" />
+        <SpeechRateField
+          id="design-speech-rate"
+          value={speechRate}
+          onValueChange={(value) => {
+            setSpeechRate(value)
+            setDesignPreset("custom")
+          }}
+        />
         <Field>
           <FieldHelpLabel
             htmlFor="design-optimize-preview"
@@ -1030,6 +1059,11 @@ function VoiceDesignFields() {
               id="design-optimize-preview"
               name="optimize_text_preview"
               value="1"
+              checked={optimizeTextPreview}
+              onCheckedChange={(checked) => {
+                setOptimizeTextPreview(checked)
+                setDesignPreset("custom")
+              }}
               size="sm"
             />
           </div>
@@ -1127,11 +1161,24 @@ function VoiceCloneFields({ acceptedFiles }: { acceptedFiles: string }) {
   )
 }
 
-function SpeechRateField({ id }: { id: string }) {
+function SpeechRateField({
+  id,
+  value,
+  onValueChange,
+}: {
+  id: string
+  value?: string
+  onValueChange?: (value: string) => void
+}) {
   return (
     <Field>
       <FieldLabel htmlFor={id}>语速</FieldLabel>
-      <Select name="speech_rate" defaultValue="off">
+      <Select
+        name="speech_rate"
+        value={value}
+        defaultValue={value === undefined ? "off" : undefined}
+        onValueChange={onValueChange}
+      >
         <SelectTrigger id={id} className="w-full">
           <SelectValue placeholder="选择语速" />
         </SelectTrigger>

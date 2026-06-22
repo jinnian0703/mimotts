@@ -31,8 +31,8 @@ import {
 } from "@/components/ui/dialog"
 
 const CAROUSEL_INTERVAL = 6000
-const REMINDER_TODAY_KEY = "mimo:announcements:reminder-date"
-const REMINDER_FOREVER_KEY = "mimo:announcements:reminder-forever"
+const REMINDER_TODAY_PREFIX = "mimo:announcements:reminder-date:"
+const REMINDER_FOREVER_PREFIX = "mimo:announcements:reminder-forever:"
 
 const icons: Record<AnnouncementLevel, React.ReactNode> = {
   info: <IconInfoCircle className="size-4" />,
@@ -115,16 +115,24 @@ function localDateKey() {
   return chinaDateKey()
 }
 
-function shouldOpenReminder() {
+function reminderTodayKey(announcementId: string) {
+  return `${REMINDER_TODAY_PREFIX}${announcementId}`
+}
+
+function reminderForeverKey(announcementId: string) {
+  return `${REMINDER_FOREVER_PREFIX}${announcementId}`
+}
+
+function shouldShowReminder(announcement: Announcement) {
   if (typeof window === "undefined") {
     return false
   }
 
   try {
     const permanentlyClosed =
-      window.localStorage.getItem(REMINDER_FOREVER_KEY) === "1"
+      window.localStorage.getItem(reminderForeverKey(announcement.id)) === "1"
     const closedToday =
-      window.localStorage.getItem(REMINDER_TODAY_KEY) === localDateKey()
+      window.localStorage.getItem(reminderTodayKey(announcement.id)) === localDateKey()
 
     return !permanentlyClosed && !closedToday
   } catch {
@@ -150,6 +158,7 @@ export function AnnouncementStack() {
   const [paused, setPaused] = useState(false)
   const [reminderOpen, setReminderOpen] = useState(false)
   const [reminderIndex, setReminderIndex] = useState(0)
+  const [, setDismissedVersion] = useState(0)
 
   useEffect(() => {
     let mounted = true
@@ -160,7 +169,8 @@ export function AnnouncementStack() {
         if (mounted) {
           const sortedAnnouncements = sortAnnouncements(nextAnnouncements)
           const popupAnnouncements = sortedAnnouncements.filter(
-            (announcement) => announcement.showPopup !== false
+            (announcement) =>
+              announcement.showPopup !== false && shouldShowReminder(announcement)
           )
 
           setAnnouncements(sortedAnnouncements)
@@ -168,9 +178,7 @@ export function AnnouncementStack() {
             current >= sortedAnnouncements.length ? 0 : current
           )
           setReminderIndex(0)
-          setReminderOpen(
-            popupAnnouncements.length > 0 && shouldOpenReminder()
-          )
+          setReminderOpen(popupAnnouncements.length > 0)
         }
       })
       .catch(() => undefined)
@@ -201,20 +209,41 @@ export function AnnouncementStack() {
   const period = formatPeriod(current)
   const hasMultiple = announcements.length > 1
   const popupAnnouncements = announcements.filter(
-    (announcement) => announcement.showPopup !== false
+    (announcement) =>
+      announcement.showPopup !== false && shouldShowReminder(announcement)
   )
   const reminder = popupAnnouncements[reminderIndex] ?? popupAnnouncements[0]
   const reminderPeriod = reminder ? formatPeriod(reminder) : null
   const hasNextReminder = reminderIndex + 1 < popupAnnouncements.length
 
   function closeReminderForToday() {
-    saveReminderValue(REMINDER_TODAY_KEY, localDateKey())
-    setReminderOpen(false)
+    closeCurrentReminder("today")
   }
 
   function closeReminderForever() {
-    saveReminderValue(REMINDER_FOREVER_KEY, "1")
-    setReminderOpen(false)
+    closeCurrentReminder("forever")
+  }
+
+  function closeCurrentReminder(mode: "today" | "forever") {
+    if (!reminder) {
+      setReminderOpen(false)
+      return
+    }
+
+    if (mode === "today") {
+      saveReminderValue(reminderTodayKey(reminder.id), localDateKey())
+    } else {
+      saveReminderValue(reminderForeverKey(reminder.id), "1")
+    }
+
+    const nextAnnouncements = popupAnnouncements.filter(
+      (announcement) => announcement.id !== reminder.id
+    )
+    setDismissedVersion((current) => current + 1)
+    setReminderIndex((current) =>
+      Math.min(current, Math.max(0, nextAnnouncements.length - 1))
+    )
+    setReminderOpen(nextAnnouncements.length > 0)
   }
 
   function advanceReminder() {
