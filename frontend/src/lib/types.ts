@@ -475,4 +475,5 @@ export type QuotaSummary = {
   usage_costs: UsageCosts
   checkin: CheckinConfig
   records: QuotaRecord[]
+  pagination?: PaginationMeta
 }

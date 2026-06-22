@@ -349,12 +349,12 @@ export function AudioWorkbench() {
               onValueChange={(value) => setActiveModule(value as AudioModule)}
               className="flex flex-col gap-6"
             >
-              <TabsList className="grid h-auto w-full grid-cols-4 gap-1 rounded-xl bg-muted/70 p-1">
+              <TabsList className="grid !h-11 w-full grid-cols-4 items-center gap-1 rounded-xl bg-muted/70 p-1 sm:!h-12">
                 {modules.map((module) => (
                   <TabsTrigger
                     key={module.value}
                     value={module.value}
-                    className="h-9 min-w-0 rounded-lg px-1 text-[13px] leading-none sm:h-10 sm:px-2 sm:text-sm"
+                    className="box-border !h-9 min-w-0 rounded-lg px-1 text-center text-[13px] leading-none sm:!h-10 sm:px-2 sm:text-sm"
                   >
                     {module.label}
                   </TabsTrigger>

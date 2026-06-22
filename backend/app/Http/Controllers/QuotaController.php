@@ -10,10 +10,14 @@ use RuntimeException;
 
 class QuotaController
 {
+    private const PAGE_SIZE_OPTIONS = [20, 50, 100];
+
     public function summary(Request $request, BillingConfigService $billing, QuotaService $quota): JsonResponse
     {
+        [$page, $perPage] = $this->paginationParams($request);
+
         return response()->json([
-            'quota' => $quota->summary($request->user(), $billing->config()),
+            'quota' => $quota->summary($request->user(), $billing->config(), $page, $perPage),
         ]);
     }
 
@@ -34,7 +38,23 @@ class QuotaController
             'checked' => (bool) $result['checked'],
             'message' => $result['message'],
             'entry' => $result['entry'],
-            'quota' => $quota->summary($request->user(), $billing->config()),
+            'quota' => $quota->summary(
+                $request->user(),
+                $billing->config(),
+                ...$this->paginationParams($request)
+            ),
         ]);
+    }
+
+    private function paginationParams(Request $request): array
+    {
+        $page = max(1, (int) $request->query('page', 1));
+        $perPage = (int) $request->query('per_page', self::PAGE_SIZE_OPTIONS[0]);
+
+        if (! in_array($perPage, self::PAGE_SIZE_OPTIONS, true)) {
+            $perPage = self::PAGE_SIZE_OPTIONS[0];
+        }
+
+        return [$page, $perPage];
     }
 }

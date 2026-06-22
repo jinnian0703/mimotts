@@ -59,6 +59,11 @@ type UserPageParams = {
   linuxDo?: "linked" | "unlinked" | "all"
 }
 
+type QuotaPageParams = {
+  page?: number
+  pageSize?: number
+}
+
 type PaginationResponse = Partial<PaginationMeta> & {
   current_page?: number
   per_page?: number
@@ -316,6 +321,20 @@ function mapUserPagination(data: UserPageResponse): PaginatedUsers {
   return {
     users,
     pagination: mapPaginationMeta(data.pagination, users.length, users.length || 20),
+  }
+}
+
+function mapQuotaSummary(quota: QuotaSummary): QuotaSummary {
+  const records = quota.records ?? []
+
+  return {
+    ...quota,
+    records,
+    pagination: mapPaginationMeta(
+      quota.pagination,
+      records.length,
+      records.length || 20
+    ),
   }
 }
 
@@ -663,19 +682,31 @@ export const api = {
       body: JSON.stringify({ plan_id: planId }),
     })
   },
-  quotaSummary() {
-    return request<{ quota: QuotaSummary }>("/quota/summary").then(
-      ({ quota }) => quota
-    )
+  quotaSummary(params: QuotaPageParams = {}) {
+    return request<{ quota: QuotaSummary }>(
+      withQuery("/quota/summary", {
+        page: params.page,
+        per_page: params.pageSize,
+      })
+    ).then(({ quota }) => mapQuotaSummary(quota))
   },
-  checkIn() {
+  checkIn(params: QuotaPageParams = {}) {
     return request<{
       checked: boolean
       message: string
       quota: QuotaSummary
-    }>("/quota/check-in", {
-      method: "POST",
-    })
+    }>(
+      withQuery("/quota/check-in", {
+        page: params.page,
+        per_page: params.pageSize,
+      }),
+      {
+        method: "POST",
+      }
+    ).then((result) => ({
+      ...result,
+      quota: mapQuotaSummary(result.quota),
+    }))
   },
   adminBillingConfig() {
     return request<{ config: BillingConfig }>("/admin/billing-config").then(

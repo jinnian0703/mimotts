@@ -62,6 +62,45 @@ class QuotaBillingReliabilityTest extends TestCase
             ->assertStatus(422);
     }
 
+    public function test_quota_summary_records_are_paginated(): void
+    {
+        $user = User::factory()->create(['quota_balance' => 100]);
+        $otherUser = User::factory()->create(['quota_balance' => 100]);
+
+        for ($index = 1; $index <= 25; $index += 1) {
+            QuotaLedgerEntry::create([
+                'user_id' => $user->id,
+                'type' => QuotaService::TYPE_ADJUST,
+                'module' => null,
+                'amount' => $index,
+                'balance_after' => $index,
+                'description' => '额度记录 '.$index,
+                'metadata' => [],
+            ]);
+        }
+
+        QuotaLedgerEntry::create([
+            'user_id' => $otherUser->id,
+            'type' => QuotaService::TYPE_ADJUST,
+            'module' => null,
+            'amount' => 999,
+            'balance_after' => 999,
+            'description' => '其他用户记录',
+            'metadata' => [],
+        ]);
+
+        $this->actingAs($user)
+            ->getJson('/api/quota/summary?page=2&per_page=20')
+            ->assertOk()
+            ->assertJsonPath('quota.balance', 100)
+            ->assertJsonPath('quota.pagination.page', 2)
+            ->assertJsonPath('quota.pagination.perPage', 20)
+            ->assertJsonPath('quota.pagination.total', 25)
+            ->assertJsonPath('quota.pagination.pageCount', 2)
+            ->assertJsonCount(5, 'quota.records')
+            ->assertJsonPath('quota.records.0.description', '额度记录 5');
+    }
+
     public function test_admin_assigning_plan_adds_plan_quota(): void
     {
         $admin = User::factory()->admin()->create();

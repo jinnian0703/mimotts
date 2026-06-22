@@ -329,10 +329,18 @@ class QuotaService
         ];
     }
 
-    public function summary(User $user, array $billingConfig, int $limit = 50): array
+    public function summary(User $user, array $billingConfig, int $page = 1, int $perPage = 20): array
     {
         $checkin = $this->normalizeCheckinConfig($billingConfig['checkin'] ?? []);
         $freshUser = $user->fresh();
+        $entryQuery = QuotaLedgerEntry::query()
+            ->where('user_id', $user->id)
+            ->orderByDesc('created_at')
+            ->orderByDesc('id');
+        $total = (clone $entryQuery)->count();
+        $safePerPage = max(1, $perPage);
+        $pageCount = max(1, (int) ceil($total / $safePerPage));
+        $safePage = min(max(1, $page), $pageCount);
 
         return [
             'balance' => $freshUser ? (int) $freshUser->quota_balance : 0,
@@ -343,13 +351,17 @@ class QuotaService
                 'checked_today' => $checkin['enabled'] ? $this->hasCheckedInToday($user, $checkin) : false,
                 'date' => now($checkin['timezone'])->toDateString(),
             ],
-            'records' => QuotaLedgerEntry::query()
-                ->where('user_id', $user->id)
-                ->latest()
-                ->limit($limit)
+            'records' => (clone $entryQuery)
+                ->forPage($safePage, $safePerPage)
                 ->get()
                 ->map(fn (QuotaLedgerEntry $entry) => $this->serializeEntry($entry))
                 ->values(),
+            'pagination' => [
+                'page' => $safePage,
+                'perPage' => $safePerPage,
+                'total' => $total,
+                'pageCount' => $pageCount,
+            ],
         ];
     }
 

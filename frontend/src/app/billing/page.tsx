@@ -1,6 +1,6 @@
 "use client"
 
-import { type ComponentType, useEffect, useState } from "react"
+import { type ComponentType, useCallback, useEffect, useState } from "react"
 import {
   IconCircleCheck,
   IconCreditCard,
@@ -14,8 +14,15 @@ import {
 import { toast } from "sonner"
 
 import { PageHeading } from "@/components/page-heading"
+import { TablePagination } from "@/components/table-pagination"
 import { api } from "@/lib/api"
-import type { BillingConfig, BillingPlan, QuotaRecord, QuotaSummary } from "@/lib/types"
+import type {
+  BillingConfig,
+  BillingPlan,
+  PaginationMeta,
+  QuotaRecord,
+  QuotaSummary,
+} from "@/lib/types"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -39,6 +46,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+
+const defaultPageSize = 20
+const defaultQuotaPagination: PaginationMeta = {
+  page: 1,
+  perPage: defaultPageSize,
+  total: 0,
+  pageCount: 1,
+}
 
 const emptyBilling: BillingConfig = {
   enabled: false,
@@ -73,43 +88,108 @@ const emptyQuota: QuotaSummary = {
     checked_today: false,
   },
   records: [],
+  pagination: defaultQuotaPagination,
 }
 
 export default function BillingPage() {
   const [config, setConfig] = useState<BillingConfig>(emptyBilling)
   const [quota, setQuota] = useState<QuotaSummary>(emptyQuota)
+  const [quotaPagination, setQuotaPagination] =
+    useState<PaginationMeta>(defaultQuotaPagination)
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(defaultPageSize)
   const [loading, setLoading] = useState(false)
   const [checkinPending, setCheckinPending] = useState(false)
   const [checkoutPlan, setCheckoutPlan] = useState<string | null>(null)
 
-  useEffect(() => {
-    refresh()
-  }, [])
+  const applyQuotaSummary = useCallback(
+    (
+      quotaSummary: QuotaSummary,
+      fallbackPage: number,
+      fallbackPageSize: number
+    ) => {
+      const pagination =
+        quotaSummary.pagination ?? {
+          page: fallbackPage,
+          perPage: fallbackPageSize,
+          total: quotaSummary.records.length,
+          pageCount: Math.max(
+            1,
+            Math.ceil(quotaSummary.records.length / fallbackPageSize)
+          ),
+        }
 
-  async function refresh() {
+      setQuota({
+        ...emptyQuota,
+        ...quotaSummary,
+        pagination,
+      })
+      setQuotaPagination(pagination)
+    },
+    []
+  )
+
+  const refresh = useCallback(async (nextPage: number, nextPageSize: number) => {
     setLoading(true)
 
     try {
       const [billingConfig, quotaSummary] = await Promise.all([
         api.billingConfig(),
-        api.quotaSummary(),
+        api.quotaSummary({ page: nextPage, pageSize: nextPageSize }),
       ])
 
       setConfig({ ...emptyBilling, ...billingConfig })
-      setQuota({ ...emptyQuota, ...quotaSummary })
+      applyQuotaSummary(quotaSummary, nextPage, nextPageSize)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "计费配置获取失败")
     } finally {
       setLoading(false)
     }
-  }
+  }, [applyQuotaSummary])
+
+  useEffect(() => {
+    let mounted = true
+
+    async function loadPage() {
+      setLoading(true)
+
+      try {
+        const [billingConfig, quotaSummary] = await Promise.all([
+          api.billingConfig(),
+          api.quotaSummary({ page, pageSize }),
+        ])
+
+        if (!mounted) {
+          return
+        }
+
+        setConfig({ ...emptyBilling, ...billingConfig })
+        applyQuotaSummary(quotaSummary, page, pageSize)
+      } catch (error) {
+        if (mounted) {
+          toast.error(error instanceof Error ? error.message : "计费配置获取失败")
+        }
+      } finally {
+        if (mounted) {
+          setLoading(false)
+        }
+      }
+    }
+
+    void loadPage()
+
+    return () => {
+      mounted = false
+    }
+  }, [applyQuotaSummary, page, pageSize])
 
   async function checkIn() {
     setCheckinPending(true)
 
     try {
-      const result = await api.checkIn()
-      setQuota({ ...emptyQuota, ...result.quota })
+      const result = await api.checkIn({ page: 1, pageSize })
+      applyQuotaSummary(result.quota, 1, pageSize)
+      setPage(1)
       toast.success(result.message)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "签到失败")
@@ -137,7 +217,11 @@ export default function BillingPage() {
       <PageHeading
         title="套餐计费"
         actions={
-          <Button variant="outline" onClick={refresh} disabled={loading}>
+          <Button
+            variant="outline"
+            onClick={() => void refresh(page, pageSize)}
+            disabled={loading}
+          >
             <IconRefresh data-icon="inline-start" />
             刷新
           </Button>
@@ -216,10 +300,13 @@ export default function BillingPage() {
 
       <Card className="border-border/70 shadow-sm">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <IconHistory />
-            额度记录
-          </CardTitle>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <CardTitle className="flex items-center gap-2">
+              <IconHistory />
+              额度记录
+            </CardTitle>
+            <Badge variant="outline">{quotaPagination.total} 条记录</Badge>
+          </div>
         </CardHeader>
         <CardContent>
           {quota.records.length === 0 ? (
@@ -249,6 +336,20 @@ export default function BillingPage() {
                   ))}
                 </TableBody>
               </Table>
+            </div>
+          )}
+          {quotaPagination.total > 0 && (
+            <div className="mt-4">
+              <TablePagination
+                total={quotaPagination.total}
+                page={quotaPagination.page}
+                pageSize={quotaPagination.perPage}
+                onPageChange={setPage}
+                onPageSizeChange={(nextPageSize) => {
+                  setPageSize(nextPageSize)
+                  setPage(1)
+                }}
+              />
             </div>
           )}
         </CardContent>
