@@ -371,15 +371,13 @@ export default function DashboardPage() {
                 title={isAdmin ? "用户管理" : "个人设置"}
                 value={isAdmin ? `${userStats.total} 个账户` : "接口与账户"}
               />
-              <QuickLinkTile
-                href={isAdmin ? "/system-settings" : "/tasks"}
-                title={isAdmin ? "系统设置" : "任务记录"}
-                value={
-                  isAdmin
-                    ? "站点与接入配置"
-                    : `${pendingCount} 个待处理`
-                }
-              />
+              {isAdmin && (
+                <QuickLinkTile
+                  href="/system-settings"
+                  title="系统设置"
+                  value="站点与接入配置"
+                />
+              )}
             </div>
           </CardContent>
         </Card>

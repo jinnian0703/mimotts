@@ -16,7 +16,7 @@ import type { InstallStatus, User } from "@/lib/types"
 import { AppLoading } from "@/components/app-loading"
 
 const publicRoutes = new Set(["/", "/install", "/login"])
-const adminRoutes = new Set(["/users", "/system-settings", "/announcements"])
+const adminRoutes = new Set(["/tasks", "/users", "/system-settings", "/announcements"])
 
 function normalizePathname(pathname: string) {
   return pathname === "/" ? pathname : pathname.replace(/\/+$/, "")
