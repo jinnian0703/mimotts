@@ -178,8 +178,32 @@ const stylePresets = [
   },
   {
     value: "singing",
-    label: "唱歌",
+    label: "自然演唱",
     prompt: "以自然、有旋律感的演唱方式表达。气息连贯，咬字清楚，情绪投入，避免播报腔。",
+    deliveryMode: "singing",
+  },
+  {
+    value: "singing-pop",
+    label: "流行抒情",
+    prompt: "以流行抒情歌曲的方式演唱。旋律柔和，情绪真诚，尾音自然延展，副歌部分更饱满。",
+    deliveryMode: "singing",
+  },
+  {
+    value: "singing-bright",
+    label: "轻快活力",
+    prompt: "以轻快、有活力的演唱方式表达。节奏明朗，咬字清晰，情绪积极，适合明亮欢快的旋律。",
+    deliveryMode: "singing",
+  },
+  {
+    value: "singing-ballad",
+    label: "温柔民谣",
+    prompt: "以温柔民谣的方式演唱。声音贴近、气息柔和，节奏舒展，保留细腻的情绪起伏。",
+    deliveryMode: "singing",
+  },
+  {
+    value: "singing-dramatic",
+    label: "情绪高亢",
+    prompt: "以情绪更强的演唱方式表达。层次递进，高潮处更有力量，保持清晰咬字和稳定气息。",
     deliveryMode: "singing",
   },
   {
@@ -197,10 +221,21 @@ const textTagPresets = [
   { label: "叹气", value: "（叹气）" },
   { label: "轻笑", value: "（轻笑）" },
   { label: "咳嗽", value: "（咳嗽）" },
+  { label: "开心", value: "（开心）" },
+  { label: "悲伤", value: "（悲伤）" },
+  { label: "生气", value: "（生气）" },
+  { label: "温柔", value: "（温柔）" },
+  { label: "兴奋", value: "（兴奋）" },
+  { label: "平静", value: "（平静）" },
   { label: "小声", value: "（小声）" },
   { label: "加快", value: "（语速变快）" },
   { label: "放慢", value: "（语速变慢）" },
   { label: "重读", value: "（重读）" },
+  { label: "东北话", value: "（东北话）" },
+  { label: "四川话", value: "（四川话）" },
+  { label: "河南话", value: "（河南话）" },
+  { label: "粤语", value: "（粤语）" },
+  { label: "台湾腔", value: "（台湾腔）" },
 ]
 
 const recognitionAudioMaxBytes = 7 * 1024 * 1024
@@ -763,11 +798,14 @@ function SynthesisFields() {
   const [stylePreset, setStylePreset] = useState("custom")
   const [stylePrompt, setStylePrompt] = useState("")
   const textRef = useRef<HTMLTextAreaElement | null>(null)
-  const singingPreset = stylePresets.find((item) => item.value === "singing")
+  const singingPresets = stylePresets.filter(
+    (item) => item.deliveryMode === "singing"
+  )
+  const defaultSingingPreset = singingPresets[0]
   const visibleStylePresets =
     deliveryMode === "singing"
-      ? stylePresets.filter((item) => item.value === "singing")
-      : stylePresets.filter((item) => item.value !== "singing")
+      ? singingPresets
+      : stylePresets.filter((item) => item.deliveryMode !== "singing")
 
   useEffect(() => {
     const form = textRef.current?.form
@@ -806,12 +844,13 @@ function SynthesisFields() {
     setDeliveryMode(value)
 
     if (value === "singing") {
-      setStylePreset("singing")
-      setStylePrompt(singingPreset?.prompt ?? "")
+      setStylePreset(defaultSingingPreset?.value ?? "custom")
+      setStylePrompt(defaultSingingPreset?.prompt ?? "")
       return
     }
 
-    if (stylePreset === "singing") {
+    const currentPreset = stylePresets.find((item) => item.value === stylePreset)
+    if (currentPreset?.deliveryMode === "singing") {
       setStylePreset("custom")
       setStylePrompt("")
     }
@@ -893,9 +932,7 @@ function SynthesisFields() {
             </SelectTrigger>
             <SelectContent position="popper">
               <SelectGroup>
-                {deliveryMode !== "singing" && (
-                  <SelectItem value="custom">自定义</SelectItem>
-                )}
+                <SelectItem value="custom">自定义</SelectItem>
                 {visibleStylePresets.map((preset) => (
                   <SelectItem key={preset.value} value={preset.value}>
                     {preset.label}
