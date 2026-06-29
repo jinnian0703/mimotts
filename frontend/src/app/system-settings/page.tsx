@@ -2579,18 +2579,18 @@ export default function SystemSettingsPage() {
                       value={audioRetention.enabled ? "按期删除" : "长期保存"}
                       description={
                         audioRetention.enabled
-                          ? `完成或失败超过 ${retentionDays} 天的任务会清理`
+                          ? `清理完成或失败超过 ${retentionDays} 天的音频文件`
                           : "不会按时间自动删除任务音频"
                       }
                     />
                     <SummaryTile
                       label="保存时长"
                       value={`${retentionDays} 天`}
-                      description="作用于完成和失败的音频任务"
+                      description="仅作用于任务关联音频文件"
                     />
                     <SummaryTile
                       label="上次清理"
-                      value={`${retentionLastPrunedCount} 个任务`}
+                      value={`${retentionLastPrunedCount} 个文件`}
                       description={retentionLastPrunedAt}
                     />
                   </div>
@@ -2601,7 +2601,7 @@ export default function SystemSettingsPage() {
                         <FieldContent>
                           <FieldTitle>启用自动清理</FieldTitle>
                           <div className="mt-1 text-sm text-muted-foreground">
-                            开启后，系统会删除超过保存时长的任务记录和关联音频文件。
+                            开启后，系统只删除超过保存时长的关联音频文件，任务记录会保留。
                           </div>
                         </FieldContent>
                         <Switch
@@ -2619,7 +2619,7 @@ export default function SystemSettingsPage() {
                     <Field>
                       <FieldHelpLabel
                         htmlFor="audio-retention-days"
-                        help="范围 1-3650 天；到期后会删除任务记录、源文件和生成文件。"
+                        help="范围 1-3650 天；到期后只删除源文件和生成文件，保留任务记录。"
                       >
                         保存时长
                       </FieldHelpLabel>
@@ -2655,7 +2655,7 @@ export default function SystemSettingsPage() {
                     />
                     <StatusRow
                       label="清理数量"
-                      value={`${retentionLastPrunedCount} 个任务`}
+                      value={`${retentionLastPrunedCount} 个文件`}
                     />
                   </div>
                 </CardContent>

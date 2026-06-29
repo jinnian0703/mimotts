@@ -460,6 +460,11 @@ export default function DashboardPage() {
                             >
                               {task.summary || task.id}
                             </span>
+                            {task.filesPrunedAt && (
+                              <Badge variant="outline" className="w-fit">
+                                音频已清理
+                              </Badge>
+                            )}
                           </div>
                         </TableCell>
                         <TableCell title={moduleLabels[task.module]}>

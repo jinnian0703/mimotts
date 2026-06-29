@@ -9,7 +9,7 @@ class PruneExpiredAudioJobs extends Command
 {
     protected $signature = 'mimo:prune-audio-retention';
 
-    protected $description = 'Delete expired MimoTTS audio jobs and files according to admin retention settings.';
+    protected $description = 'Delete expired MimoTTS audio files according to admin retention settings.';
 
     public function handle(AudioRetentionService $retention): int
     {
@@ -22,9 +22,9 @@ class PruneExpiredAudioJobs extends Command
         }
 
         $this->info(sprintf(
-            'Deleted %d jobs and %d files older than %s.',
-            $result['deleted_jobs'],
+            'Deleted %d files from %d jobs older than %s.',
             $result['deleted_files'],
+            $result['affected_jobs'],
             $result['cutoff']
         ));
 

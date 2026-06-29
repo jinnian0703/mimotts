@@ -49,18 +49,20 @@ class AudioRetentionService
         if (! $config['enabled']) {
             return [
                 'enabled' => false,
-                'deleted_jobs' => 0,
+                'affected_jobs' => 0,
                 'deleted_files' => 0,
                 'cutoff' => null,
             ];
         }
 
         $cutoff = Carbon::now()->subDays((int) $config['retention_days']);
-        $deletedJobs = 0;
+        $affectedJobs = 0;
         $deletedFiles = 0;
+        $prunedAt = DisplayTime::now();
 
         AudioJob::query()
             ->with('files')
+            ->has('files')
             ->whereIn('status', ['completed', 'failed'])
             ->where(function ($query) use ($cutoff): void {
                 $query
@@ -72,25 +74,41 @@ class AudioRetentionService
                     });
             })
             ->orderBy('id')
-            ->chunkById(100, function ($jobs) use (&$deletedJobs, &$deletedFiles): void {
+            ->chunkById(100, function ($jobs) use (&$affectedJobs, &$deletedFiles, $prunedAt): void {
                 foreach ($jobs as $job) {
+                    $jobDeletedFiles = 0;
+
                     foreach ($job->files as $file) {
                         Storage::disk($file->disk)->delete($file->path);
+                        $file->delete();
                         $deletedFiles++;
+                        $jobDeletedFiles++;
                     }
 
-                    $job->delete();
-                    $deletedJobs++;
+                    if ($jobDeletedFiles > 0) {
+                        $requestPayload = is_array($job->request_payload) ? $job->request_payload : [];
+                        $requestMeta = is_array($requestPayload['_meta'] ?? null) ? $requestPayload['_meta'] : [];
+                        $requestPayload['_meta'] = array_merge($requestMeta, [
+                            'audio_files_pruned_at' => $prunedAt,
+                            'audio_files_pruned_count' => (($requestMeta['audio_files_pruned_count'] ?? 0) + $jobDeletedFiles),
+                            'audio_files_pruned_reason' => 'retention',
+                        ]);
+
+                        $job->forceFill([
+                            'request_payload' => $requestPayload,
+                        ])->save();
+                        $affectedJobs++;
+                    }
                 }
             });
 
-        $config['last_pruned_at'] = DisplayTime::now();
-        $config['last_pruned_count'] = $deletedJobs;
+        $config['last_pruned_at'] = $prunedAt;
+        $config['last_pruned_count'] = $deletedFiles;
         SystemSetting::putPlain(self::KEY, $config);
 
         return [
             'enabled' => true,
-            'deleted_jobs' => $deletedJobs,
+            'affected_jobs' => $affectedJobs,
             'deleted_files' => $deletedFiles,
             'cutoff' => DisplayTime::format($cutoff),
         ];

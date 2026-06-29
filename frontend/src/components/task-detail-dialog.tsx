@@ -70,6 +70,7 @@ export function TaskDetailDialog({
     Boolean(task.outputUrl) &&
     (textOutputModules.has(task.module) || isTextOutput(task))
   const requestSummary = normalizeRequestSummary(task.requestSummary)
+  const filesPruned = Boolean(task.filesPrunedAt)
 
   return (
     <Dialog>
@@ -88,7 +89,9 @@ export function TaskDetailDialog({
               <Badge variant="outline">{moduleLabels[task.module]}</Badge>
             </div>
             <DialogDescription>
-              {task.summary ?? "暂无结果摘要。"}
+              {filesPruned
+                ? "音频文件已按保存策略清理，仅保留任务记录。"
+                : task.summary ?? "暂无结果摘要。"}
             </DialogDescription>
           </DialogHeader>
         </div>
@@ -301,6 +304,15 @@ function ResultPanel({
           </span>
         </div>
       )}
+      {task.filesPrunedAt && (
+        <div className="mb-4 flex items-start gap-2 rounded-lg border border-amber-300/30 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-300/20 dark:bg-amber-300/10 dark:text-amber-100">
+          <IconAlertCircle className="mt-0.5 size-4 shrink-0" />
+          <span className="min-w-0 break-words">
+            音频文件已按保存策略清理，仅保留任务记录。
+            {task.filesPrunedAt ? ` 清理时间：${task.filesPrunedAt}` : ""}
+          </span>
+        </div>
+      )}
       {canPlay && <TaskAudioPlayback task={task} />}
       <div className="mt-4">
         {task.outputUrl ? (
@@ -313,7 +325,7 @@ function ResultPanel({
         ) : (
           <Button disabled variant="outline" className="w-full">
             <IconDownload data-icon="inline-start" />
-            暂无结果
+            {task.filesPrunedAt ? "音频文件已清理" : "暂无结果"}
           </Button>
         )}
       </div>
@@ -374,6 +386,12 @@ function MetadataPanel({
                   : "-"
               }
             />
+            {task.filesPrunedAt && (
+              <>
+                <DetailItem label="清理状态" value="音频文件已清理" />
+                <DetailItem label="清理时间" value={task.filesPrunedAt} />
+              </>
+            )}
           </div>
         </div>
 

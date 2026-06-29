@@ -283,6 +283,9 @@ export type AudioTask = {
   fileName?: string | null
   fileMimeType?: string | null
   fileSize?: number | null
+  filesPrunedAt?: string | null
+  filesPrunedCount?: number | null
+  filesPrunedReason?: string | null
   apiConfigSource?: "system" | "user" | null
   billable?: boolean | null
   quotaCost?: number | null

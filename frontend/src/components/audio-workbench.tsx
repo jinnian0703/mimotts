@@ -1269,6 +1269,11 @@ function TaskTable({
                   <TableCell>
                     <div className="flex flex-col gap-1">
                       <span className="font-medium">{task.title}</span>
+                      {task.filesPrunedAt && (
+                        <Badge variant="outline" className="w-fit">
+                          音频已清理
+                        </Badge>
+                      )}
                     </div>
                   </TableCell>
                   <TableCell>{moduleLabels[task.module]}</TableCell>
